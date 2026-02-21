@@ -167,7 +167,8 @@ def home():
 
 @app.route("/generate", methods=["POST"])
 def generate():
-    data = request.json
+    data = request.form.get("curriculum")
+    curriculum = json.loads(data)
     if not data or "skill" not in data:
         return jsonify({"error": "Please provide a skill"}), 400
         
@@ -177,20 +178,20 @@ def generate():
     
     half_semester, phases = get_semester_details(duration_input)
 
-    prompt = f"""
-    Create a {duration_input} structured curriculum for {skill}.
-    Target Audience Level: {level}.
-    Rules:
-    - Provide exactly {phases} Phase(s).
-    - Each Phase must include 2 to 4 courses.
-    - Each course must include a Description and Key topics.
+    import time
 
-    Format EXACTLY like this:
-    Phase 1: Foundations
-    Course Name
-    Description: A short one-sentence technical description.
-    Key topics: topic1, topic2, topic3
-    """
+    prompt = f"""
+     Generate a UNIQUE and detailed curriculum for {skill}.
+
+      Requirements:
+    - Make it different every time.
+    - Include modern tools and technologies.
+    - Provide clear course titles.
+    - Include key topics for each course.
+    - Focus on practical learning.
+
+    Timestamp: {time.time()}
+      """
 
     raw_text = generate_curriculum(prompt)
     if not raw_text:
