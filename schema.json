@@ -1,0 +1,12 @@
+{
+    "Semester 1": [
+        {
+            "course_title": "Introduction to Python Programming",
+            "topics": ["Basic syntax", "data types", "control structures", "functions", "file operations"]
+        },
+        {
+            "course_title": "Data Preprocessing and Cleaning",
+            "topics": ["Handling missing values", "data normalization", "feature scaling", "outlier detection"]
+        }
+    ]
+}

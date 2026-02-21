@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Curriculum Result</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            justify-content: center;
+            padding: 30px;
+        }
+
+        .a4-page {
+            width: 210mm;
+            min-height: 297mm;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .semester-title {
+            background: linear-gradient(90deg,#667eea,#764ba2);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        @media print {
+            body {
+                background: white;
+            }
+            .a4-page {
+                box-shadow: none;
+                border-radius: 0;
+            }
+        }
+    </style>
+</head>
+
+<script>
+function downloadPDF() {
+    fetch("/download-pdf", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            skill: "{{ skill }}"
+        })
+    })
+    .then(response => response.blob())
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "{{ skill }}_curriculum.pdf";
+        a.click();
+    });
+}
+</script>
+<body>
+<div class="a4-page">
+
+    <h2>{{ skill }} Curriculum</h2>
+
+    {% for semester, courses in data.items() %}
+        <div class="semester-title">{{ semester }}</div>
+
+        {% for course in courses %}
+            <h4>{{ course.course_title }}</h4>
+            <ul>
+                {% for topic in course.topics %}
+                    <li>{{ topic }}</li>
+                {% endfor %}
+            </ul>
+        {% endfor %}
+    {% endfor %}
+<button onclick="window.print()">Print</button>
+<div style="text-align:center; margin-top:20px;">
+    <button onclick="downloadPDF()" class="download-btn">
+        Download PDF
+    </button>
+</div>
+</div>
+</body>
+</html>

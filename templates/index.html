@@ -1,0 +1,39 @@
+<<!DOCTYPE html>
+<html>
+<head>
+    <title>GenAI Curriculum Generator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<div class="main-container">
+    <div class="form-container">
+
+        <h1>GenAI Curriculum Generator</h1><button id="themeToggle">🌙 Dark Mode</button>
+        <p>Create structured AI learning paths instantly</p>
+
+        <form id="curriculumForm">
+            <input type="text" id="stream" placeholder="Enter your stream" required>
+
+            <select id="duration" required>
+                <option value="">Select Duration</option>
+                <option value="3 Months">3 Months</option>
+                <option value="6 Months">6 Months</option>
+                <option value="1 Year">1 Year</option>
+            </select>
+
+            <button type="submit">Generate Curriculum</button>
+        </form>
+
+        <!-- Loader -->
+        <div id="loader" style="display:none;">Generating Curriculum...</div>
+
+        <!-- Result Section -->
+        <div id="result"></div>
+    </div>
+</div>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
