@@ -25,17 +25,17 @@ def get_semester_details(duration_input):
     """Maps user timeframes to semester counts."""
     duration_input = str(duration_input).lower().strip()
     
-    # 3 Months -> Half Semester (1 Phase)
+    # 3 Months -> Half Semester
     if duration_input in ["3 months", "3 month", "3", "0.5", "half"]:
-        return True, "1"
+        return True, "0.5"
         
-    # 6 Months -> 2 Phases
+    # 6 Months -> 1 Semester
     elif duration_input in ["6 months", "6 month", "6"]:
-        return False, "2"
+        return False, "1"
         
-    # 1 Year -> 4 Phases
+    # 1 Year -> 2 Semesters
     elif duration_input in ["1 year", "1 yr", "1", "12 months", "12", "2 semesters"]:
-        return False, "4"
+        return False, "2"
         
     # Default fallback
     else:
@@ -52,19 +52,14 @@ def curriculum_to_json(text):
     for line in lines:
         line = line.replace("**", "")
 
-        if "Phase" in line or "Semester" in line:
+        if "Semester" in line:
             current_semester = line.replace(":", "").strip()
             curriculum[current_semester] = []
             continue
 
         clean_line = re.sub(r"^[•*+\-\s]+", "", line)
 
-        if clean_line.lower().startswith("description:"):
-            if current_course:
-                current_course["course_description"] = clean_line.split(":", 1)[1].strip()
-            continue
-
-        if clean_line.lower().startswith("key topics:"):
+        if clean_line.lower().startswith("key topics"):
             topics_text = clean_line.split(":", 1)[1]
             topics = re.split(r",|\)|\(", topics_text)
             topics = [t.strip() for t in topics if t.strip()]
@@ -73,8 +68,7 @@ def curriculum_to_json(text):
                 current_course["topics"] = topics
             continue
 
-        # Ignore AI chatty responses
-        if clean_line.lower().startswith(("note", "here is", "this is", "sure", "rule", "format")):
+        if clean_line.lower().startswith(("note", "here is", "this is")):
             continue
 
         if current_semester:
@@ -87,7 +81,6 @@ def curriculum_to_json(text):
 
             current_course = {
                 "course_title": course_name,
-                "course_description": "",
                 "topics": []
             }
             curriculum[current_semester].append(current_course)
@@ -131,29 +124,20 @@ def draw_border(canvas, doc):
     canvas.setLineWidth(1)
     canvas.rect(margin+6, margin+6, width - 2*(margin+6), height - 2*(margin+6))
 
-def create_pdf(curriculum, filename="curriculum.pdf", skill_name=""):
+def create_pdf(curriculum, filename="curriculum.pdf"):
     """Builds the PDF document using ReportLab."""
     doc = SimpleDocTemplate(filename)
     styles = getSampleStyleSheet()
     elements = []
-
-    if skill_name:
-        elements.append(Paragraph(f"{skill_name} Curriculum", styles["Title"]))
-        elements.append(Spacer(1, 12))
 
     for semester, courses in curriculum.items():
         elements.append(Paragraph(semester, styles["Heading1"]))
         elements.append(Spacer(1, 12))
 
         for course in courses:
-            elements.append(Paragraph(course.get("course_title", "Course"), styles["Heading2"]))
-            
-            if course.get("course_description"):
-                elements.append(Paragraph(f"<i>{course['course_description']}</i>", styles["Normal"]))
-                elements.append(Spacer(1, 6))
-
+            elements.append(Paragraph(course["course_title"], styles["Heading2"]))
             topics = ", ".join(course.get("topics", []))
-            elements.append(Paragraph(f"<b>Key topics:</b> {topics}", styles["Normal"]))
+            elements.append(Paragraph(f"Key topics: {topics}", styles["Normal"]))
             elements.append(Spacer(1, 12))
 
     doc.build(elements, onFirstPage=draw_border, onLaterPages=draw_border)
@@ -167,31 +151,41 @@ def home():
 
 @app.route("/generate", methods=["POST"])
 def generate():
-    data = request.form.get("curriculum")
-    curriculum = json.loads(data)
+    data = request.json
     if not data or "skill" not in data:
         return jsonify({"error": "Please provide a skill"}), 400
         
     skill = data["skill"]
     duration_input = data.get("duration", "1 year")
-    level = data.get("level", "Intermediate")
     
-    half_semester, phases = get_semester_details(duration_input)
+    half_semester, semesters = get_semester_details(duration_input)
 
-    import time
+    if half_semester:
+        prompt = f"""
+        Create a HALF semester curriculum for {skill}.
+        Rules:
+        - Include ONLY 2 to 3 courses.
+        - Focus on fundamentals.
+        - Each course must include key topics.
 
-    prompt = f"""
-     Generate a UNIQUE and detailed curriculum for {skill}.
+        Format EXACTLY like this:
+        Semester 1:
+        Course Name
+        Key topics: topic1, topic2
+        """
+    else:
+        prompt = f"""
+        Create a {semesters} semester curriculum for {skill}.
+        Rules:
+        - Provide exactly {semesters} semester(s).
+        - Each semester must include 3 to 5 courses.
+        - Each course must include key topics.
 
-      Requirements:
-    - Make it different every time.
-    - Include modern tools and technologies.
-    - Provide clear course titles.
-    - Include key topics for each course.
-    - Focus on practical learning.
-
-    Timestamp: {time.time()}
-      """
+        Format EXACTLY like this:
+        Semester 1:
+        Course Name
+        Key topics: topic1, topic2
+        """
 
     raw_text = generate_curriculum(prompt)
     if not raw_text:
@@ -199,23 +193,83 @@ def generate():
         
     structured_data = curriculum_to_json(raw_text)
 
-    if not structured_data:
+    if structured_data and schema:
+        try:
+            validate(instance=structured_data, schema=schema)
+        except ValidationError as e:
+            return jsonify({
+                "error": "LLM output failed schema validation", 
+                "details": e.message
+            }), 500
+    elif not structured_data:
         return jsonify({"error": "Failed to parse curriculum into JSON"}), 500
 
     return jsonify(structured_data)
+
+@app.route("/view", methods=["POST"])
+def view():
+    try:
+        curriculum = json.loads(request.form["curriculum"])
+        skill = request.form["skill"]
+
+        return render_template(
+            "result.html",
+            data=curriculum,
+            skill=skill
+        )
+    except (KeyError, json.JSONDecodeError) as e:
+        return f"Error processing request: {str(e)}", 400
 
 @app.route("/download-pdf", methods=["POST"])
 def download_pdf():
     data = request.get_json()
 
-    if not data or "curriculum" not in data:
-        return jsonify({"error": "Missing curriculum data"}), 400
+    if not data or "skill" not in data:
+        return jsonify({"error": "Please provide a skill"}), 400
 
-    skill = data.get("skill", "AI")
-    curriculum = data["curriculum"]
+    skill = data["skill"]
+    duration_input = data.get("duration", "1 year")
+    
+    half_semester, semesters = get_semester_details(duration_input)
+
+    if half_semester:
+        prompt = f"""
+        Create a HALF semester curriculum for {skill}.
+        Rules:
+        - Include ONLY 2 to 3 courses.
+        - Focus on fundamentals.
+        - Each course must include key topics.
+
+        Format EXACTLY like this:
+        Semester 1:
+        Course Name
+        Key topics: topic1, topic2
+        """
+    else:
+        prompt = f"""
+        Create a {semesters} semester curriculum for {skill}.
+        Rules:
+        - Provide exactly {semesters} semester(s).
+        - Each semester must include 3 to 5 courses.
+        - Each course must include key topics.
+
+        Format EXACTLY like this:
+        Semester 1:
+        Course Name
+        Key topics: topic1, topic2
+        """
+
+    raw_text = generate_curriculum(prompt)
+    if not raw_text:
+        return jsonify({"error": "Failed to connect to local LLM"}), 500
+        
+    structured_data = curriculum_to_json(raw_text)
+    
+    if not structured_data:
+        return jsonify({"error": "Failed to parse curriculum into JSON"}), 500
 
     filename = f"{skill.replace(' ', '_')}_curriculum.pdf"
-    pdf_path = create_pdf(curriculum, filename=filename, skill_name=skill)
+    pdf_path = create_pdf(structured_data, filename=filename)
 
     return send_file(pdf_path, as_attachment=True)
 
