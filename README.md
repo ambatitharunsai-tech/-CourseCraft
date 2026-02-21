@@ -1,4 +1,5 @@
-# CourseCraft
+GenAI Paths
+Curriculum Architect
 
 CourseCraft is an AI-powered curriculum generator that creates structured semester-wise learning paths and professional PDF outputs.
 
