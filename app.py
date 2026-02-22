@@ -61,8 +61,7 @@ def generate_curriculum(prompt):
     }
 
     data = {
-        # Changed to a much faster model to prevent timeouts on Render
-        "model": "llama3-8b-8192",
+        "model": "llama-3.3-70b-versatile",
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.3
     }
