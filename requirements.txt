@@ -4,3 +4,4 @@ requests==2.32.5
 jsonschema==4.26.0
 reportlab==4.4.10
 groq==1.0.0
+Flask-SQLAlchemy==3.1.1
