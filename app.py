@@ -51,7 +51,7 @@ def parse_curriculum(text):
 def generate_curriculum(prompt):
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        return {"error": "Missing GROQ_API_KEY"}
+        return {"error": "Missing GROQ_API_KEY environment variable"}
 
     url = "https://api.groq.com/openai/v1/chat/completions"
 
@@ -61,13 +61,15 @@ def generate_curriculum(prompt):
     }
 
     data = {
-        "model": "llama-3.3-70b-versatile",
+        # Changed to a much faster model to prevent timeouts on Render
+        "model": "llama3-8b-8192",
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.3
     }
 
     try:
-        response = requests.post(url, headers=headers, json=data, timeout=60)
+        # Increased timeout to 90 seconds
+        response = requests.post(url, headers=headers, json=data, timeout=90)
 
         print("Status:", response.status_code)
         print("Response:", response.text[:300])
@@ -79,7 +81,17 @@ def generate_curriculum(prompt):
 
     except requests.exceptions.RequestException as e:
         print("Groq Error:", e)
-        return {"error": "LLM request failed or timed out"}
+        # Improved: Capture the literal connection error (like ReadTimeout)
+        error_details = f"LLM request failed: {str(e)}"
+        
+        # Improved: Extract exactly what Groq is complaining about if it's an HTTP error
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_details = e.response.json().get("error", {}).get("message", str(e))
+            except:
+                error_details = f"HTTP {e.response.status_code}: {e.response.reason}"
+                
+        return {"error": error_details}
 
 # ---------------- ROUTES ----------------
 
@@ -130,7 +142,7 @@ Format:
     structured = parse_curriculum(ai_response)
 
     if not structured:
-        return jsonify({"error": "Invalid AI response"}), 500
+        return jsonify({"error": "Invalid AI response. The model did not return valid JSON."}), 500
 
     save_history(skill, duration, structured["curriculum"])
 
@@ -190,5 +202,7 @@ def delete_history_item(item_id):
 # ---------------- START SERVER ----------------
 
 if __name__ == "__main__":
-    print("Server running at http://localhost:5051")
-    app.run(host="0.0.0.0", port=5051)
+    # Dynamically bind port for cloud server environments (like Render)
+    port = int(os.environ.get("PORT", 5051))
+    print(f"Server running on port {port}")
+    app.run(host="0.0.0.0", port=port)
