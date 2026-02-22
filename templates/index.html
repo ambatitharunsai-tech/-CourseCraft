@@ -1,521 +1,384 @@
 <!DOCTYPE html>
-<html lang="en" class="light">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
+    <title>Curriculum Generator</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GenAI Curriculum Generator</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        brand: {
-                            light: '#5eead4', // teal-300
-                            DEFAULT: '#0d9488', // teal-600
-                            dark: '#0f766e', // teal-700
-                        }
-                    },
-                    animation: {
-                        'fade-in': 'fadeIn 0.5s ease-out forwards',
-                        'spin-slow': 'spin 2s linear infinite',
-                    },
-                    keyframes: {
-                        fadeIn: {
-                            '0%': { opacity: '0', transform: 'translateY(10px)' },
-                            '100%': { opacity: '1', transform: 'translateY(0)' },
-                        }
-                    }
-                }
-            }
-        }
-    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <!-- Added html2pdf for Download functionality -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
-        /* Smooth Scrolling */
-        html { scroll-behavior: smooth; }
-
-        /* Custom Text Selection */
-        ::selection {
-            background-color: rgba(13, 148, 136, 0.25);
-            color: inherit;
-        }
-        .dark ::selection {
-            background-color: rgba(94, 234, 212, 0.25);
+        /* Ensure the body takes full screen height and prevents global scrolling */
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden; 
         }
 
-        /* Modern Scrollbar */
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { 
-            background: #cbd5e1; 
-            border-radius: 10px; 
-            border: 2px solid transparent; 
-            background-clip: padding-box; 
-        }
-        .dark ::-webkit-scrollbar-thumb { 
-            background: #334155; 
-            border: 2px solid transparent; 
-            background-clip: padding-box;
-        }
-        ::-webkit-scrollbar-thumb:hover { background-color: #0d9488; }
-        .dark ::-webkit-scrollbar-thumb:hover { background-color: #5eead4; }
-
-        /* Custom Animations */
-        @keyframes pulse-glow {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.4); }
-            70% { box-shadow: 0 0 0 6px rgba(13, 148, 136, 0); }
-        }
-        .animate-pulse-glow:hover {
-            animation: pulse-glow 1.5s infinite;
+        /* Center the entire container in the exact middle of the page */
+        .main-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            padding: 15px;
+            box-sizing: border-box;
         }
 
-        /* Print Specific Styles */
-        @media print {
-            body { background: white !important; color: black !important; display: block !important; }
-            #sidebar, .no-print { display: none !important; }
-            #mainContent { 
-                width: 100% !important; 
-                margin: 0 !important; 
-                padding: 0 !important; 
-                overflow: visible !important;
-                height: auto !important;
-            }
-            .print-break { page-break-inside: avoid; margin-bottom: 2rem !important; }
-            h1, h2, h3, h4, p, li, span { color: black !important; }
-            .print-border { border: 1px solid #e2e8f0 !important; }
-            .print-bg-white { background: white !important; }
+        /* Override form-container to act like a large chat window */
+        .form-container {
+            display: flex !important;
+            flex-direction: column;
+            width: 100%;
+            max-width: 800px !important; /* Made wider for better curriculum readability */
+            height: 100%;
+            max-height: 95vh; /* Stretches to fill most of the screen vertically */
+            padding: 30px !important;
+            box-sizing: border-box;
+        }
+
+        /* Fixed Headers at the top */
+        .header-area {
+            flex-shrink: 0;
+            margin-bottom: 15px;
+        }
+
+        .header-area h1 {
+            text-align: center;
+            width: 100%;
+            font-size: 2.0rem;
+            font-weight: 800;
+            margin: 0 0 10px 0;
+            /* Sleek gradient text effect */
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Adjust gradient for dark mode to stay bright and readable */
+        body.dark .header-area h1 {
+            background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header-area p {
+            text-align: center;
+            width: 100%;
+            font-size: 1.1rem;
+            color: #a6c6cc;
+            margin: 0;
+            font-weight: 450;
+            letter-spacing: 0.5px;
+        }
+
+        body.dark .header-area p {
+            color: #aaa;
+        }
+
+        /* Scrollable Result Area (Middle) */
+        .content-area {
+            flex-grow: 1;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding-right: 10px; /* Space for the scrollbar */
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Custom scrollbar for the results area */
+        .content-area::-webkit-scrollbar {
+            width: 6px;
+        }
+        .content-area::-webkit-scrollbar-thumb {
+            background: rgba(102, 126, 234, 0.6);
+            border-radius: 10px;
+        }
+
+        /* Form Area locked to the Bottom */
+        #curriculumForm {
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+
+        #curriculumForm input,
+        #curriculumForm select,
+        #curriculumForm button {
+            text-align: center;
+            text-align-last: center; /* Centers the visible option in the select dropdown */
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box; /* Prevents padding from breaking width */
+        }
+
+        /* Side-by-side dropdown container */
+        .select-row {
+            display: flex;
+            gap: 12px;
+            width: 100%;
+        }
+
+        /* Ensure dropdowns inside the row share the space equally */
+        .select-row select {
+            flex: 1;
+            padding: 10px 12px; /* Decreased padding for dropdowns */
+            font-size: 0.95rem; /* Smaller text size */
+            border-radius: 10px; /* Tighter corners for the smaller size */
+        }
+
+        /* Make the "stream" input a larger block with curved corners */
+        #stream {
+            padding: 12px 15px; /* Decreased vertical padding */
+            border-radius: 15px; /* Slightly tighter curves to match smaller size */
+            font-size: 1rem;     /* Scaled down text */
+            border: 2px solid #ccc;
+            transition: border-color 0.3s;
+            margin-bottom: 15px;
+        }
+
+        #stream:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+
+        /* Customize the Generate button */
+        #curriculumForm button[type="submit"] {
+            width: 70%;
+            padding: 12px 20px;
+            margin-top: 20px;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+        }
+
+        #curriculumForm button[type="submit"]:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Top Left Dropdown Menu */
+        .menu-container {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+        }
+
+        .menu-btn {
+            background: rgba(255, 255, 255, 0.2); 
+            backdrop-filter: blur(5px); 
+            padding: 8px 16px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            color: white;
+            font-weight: bold;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: opacity 0.3s;
+        }
+
+        .menu-btn:hover {
+            opacity: 0.8;
+        }
+
+        .dropdown-content {
+            display: none; 
+            flex-direction: column; 
+            position: absolute;
+            top: 100%;
+            left: 0;
+            margin-top: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(5px);
+            border-radius: 10px;
+            min-width: 120px; 
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+        }
+
+        .dropdown-content.show {
+            display: flex; 
+        }
+
+        .dropdown-content a {
+            color: white;
+            padding: 10px 16px;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+
+        .dropdown-content a:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Dark Mode support for Menu */
+        body.dark .menu-btn,
+        body.dark .dropdown-content {
+            background: rgba(0, 0, 0, 0.4);
+            border-color: rgba(255, 255, 255, 0.05);
+        }
+        
+        body.dark .menu-btn,
+        body.dark .dropdown-content a {
+            color: #eee;
+        }
+
+        body.dark .dropdown-content a:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Top Right New Chat Button */
+        .new-chat-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(5px);
+            padding: 8px 16px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            color: white;
+            font-weight: bold;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: opacity 0.3s;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .new-chat-btn:hover {
+            opacity: 0.8;
+        }
+
+        /* Dark Mode support for New Chat Button */
+        body.dark .new-chat-btn {
+            background: rgba(0, 0, 0, 0.4);
+            border-color: rgba(255, 255, 255, 0.05);
+            color: #eee;
         }
     </style>
 </head>
-<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 transition-colors duration-300 h-screen w-full flex flex-col md:flex-row overflow-hidden font-sans">
+
+<body>
+<!-- Menu Bar positioned at top left -->
+<div class="menu-container">
+    <div class="menu-btn" onclick="toggleMenu()">☰ Menu</div>
+    <div class="dropdown-content" id="myDropdown">
+        <a href="#">Home</a>
+        <a href="#">History</a>
+        <a id="downloadBtn" style="cursor: pointer; display: none;">📥 Download PDF</a> <!-- Added Download Option -->
+        <a href="#">Settings</a>
+        <!-- Dark Mode Toggle moved inside the menu -->
+        <a id="themeToggle" style="cursor: pointer;">🌙 Dark Mode</a>
+        <a href="#">About</a>
+    </div>
+</div>
+
+<!-- Top Right New Chat Button -->
+<a href="/" class="new-chat-btn">＋ New Chat</a>
+
+<div class="main-container">
+    <div class="form-container">
+        
+        <!-- Header Section -->
+        <div class="header-area">
+            <h1>WELCOME...!</h1>
+            <p>Create structured AI learning paths instantly</p>
+        </div>
+
+        <!-- Middle Scrollable Result Area -->
+        <div class="content-area">
+            <div id="loader" style="display:none; text-align: center; margin-top: 20px;">Generating...</div>
+            <div id="result"></div>
+        </div>
+
+        <!-- Bottom Input Form -->
+        <form id="curriculumForm">
+            <input type="text" id="stream" placeholder="Enter your stream/skill" required>
+
+            <div class="select-row">
+                <select id="duration" required>
+                    <option value="" disabled selected>Select Duration</option>
+                    <option value="3 Months">3 Months (Intensive)</option>
+                    <option value="6 Months">6 Months (Standard)</option>
+                    <option value="1 Year">1 Year (Comprehensive)</option>
+                </select>
+
+                <select id="level" required>
+                    <option value="" disabled selected>Select Level</option>
+                    <option value="Beginner">Beginner</option>
+                    <option value="Advanced">Advanced</option>
+                    <option value="Pro">Pro</option>
+                </select>
+            </div>
+
+            <button type="submit">Generate Curriculum</button>
+        </form>
+        
+    </div>
+</div>
+
+<script>
+    // Toggles the dropdown menu when clicking the menu button
+    function toggleMenu() {
+        document.getElementById("myDropdown").classList.toggle("show");
+    }
+
+    // Closes the dropdown if you click anywhere else on the screen
+    window.onclick = function(event) {
+        if (!event.target.matches('.menu-btn')) {
+            var dropdowns = document.getElementsByClassName("dropdown-content");
+            for (var i = 0; i < dropdowns.length; i++) {
+                var openDropdown = dropdowns[i];
+                if (openDropdown.classList.contains('show')) {
+                    openDropdown.classList.remove('show');
+                }
+            }
+        }
+    }
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/typo-js@1.2.4/typo.min.js"></script>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+<!-- History Popup -->
+<div id="historyPopup" class="history-popup">
+  <div class="history-glass">
     
-    <!-- Sidebar / Control Panel -->
-    <aside id="sidebar" class="w-full md:w-80 lg:w-96 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col h-auto md:h-full flex-shrink-0 z-20 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-        <div class="p-6 md:p-8 flex-1 overflow-y-auto">
-            
-            <!-- Branding -->
-            <div class="flex justify-between items-start mb-8">
-                <div>
-                    <div class="flex items-center gap-3 mb-1">
-                        <div class="w-8 h-8 rounded-lg bg-brand text-white flex items-center justify-center shadow-md shadow-brand/30">
-                            <i class="fas fa-layer-group text-sm"></i>
-                        </div>
-                        <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white">GenAI <span class="text-brand">Paths</span></h1>
-                    </div>
-                    <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Curriculum Architect</p>
-                </div>
-                <button id="themeToggle" class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors">
-                    <i class="fas fa-moon hidden dark:block text-sm"></i>
-                    <i class="fas fa-sun block dark:hidden text-sm"></i>
-                </button>
-            </div>
+    <div class="history-header">
+      <h3>History</h3>
+      <button id="closeHistory">✕</button>
+    </div>
 
-            <!-- Configuration Form -->
-            <form id="curriculumForm" class="space-y-6">
-                <!-- Stream -->
-                <div class="space-y-2">
-                    <label class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Core Subject</label>
-                    <input type="text" id="stream" placeholder="e.g. Prompt Engineering..." required
-                        class="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-brand/50 focus:border-brand transition-all outline-none text-sm text-slate-900 dark:text-white placeholder-slate-400">
-                    
-                    <!-- Quick Links -->
-                    <div class="flex flex-wrap gap-2 mt-2">
-                        <button type="button" onclick="document.getElementById('stream').value='LLM Apps'; document.getElementById('stream').focus();" class="text-[10px] px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-brand transition-colors">LLM Apps</button>
-                        <button type="button" onclick="document.getElementById('stream').value='AI Agents'; document.getElementById('stream').focus();" class="text-[10px] px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-brand transition-colors">AI Agents</button>
-                        <button type="button" onclick="document.getElementById('stream').value='Computer Vision'; document.getElementById('stream').focus();" class="text-[10px] px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-brand transition-colors">Vision</button>
-                    </div>
-                </div>
+    <input type="text" id="historySearch" placeholder="Search history...">
 
-                <!-- Duration -->
-                <div class="space-y-2">
-                    <label class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Timeline</label>
-                    <div class="relative">
-                        <select id="duration" required
-                            class="w-full pl-4 pr-10 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-brand/50 focus:border-brand transition-all outline-none text-sm text-slate-900 dark:text-white appearance-none cursor-pointer">
-                            <option value="" disabled selected>Select timeline duration</option>
-                            <option value="3 Months">3 Months (Intensive Bootcamp)</option>
-                            <option value="6 Months">6 Months (Standard Track)</option>
-                            <option value="1 Year">1 Year (Deep Specialization)</option>
-                        </select>
-                        <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                            <i class="fas fa-chevron-down text-slate-400 text-xs"></i>
-                        </div>
-                    </div>
-                </div>
+    <div class="history-controls">
+      <button id="sortNewest">Newest</button>
+      <button id="sortOldest">Oldest</button>
+      <button id="exportHistory">Export</button>
+      <button id="clearHistory">Clear All</button>
+    </div>
 
-                <!-- Skill Level -->
-                <div class="space-y-2">
-                    <label class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Target Audience</label>
-                    <div class="relative">
-                        <select id="level" required
-                            class="w-full pl-4 pr-10 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-brand/50 focus:border-brand transition-all outline-none text-sm text-slate-900 dark:text-white appearance-none cursor-pointer">
-                            <option value="" disabled selected>Select starting proficiency</option>
-                            <option value="Beginner">Beginner (No prior experience)</option>
-                            <option value="Intermediate">Intermediate (Some background)</option>
-                            <option value="Advanced">Advanced (Requires deep dive)</option>
-                        </select>
-                        <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                            <i class="fas fa-chevron-down text-slate-400 text-xs"></i>
-                        </div>
-                    </div>
-                </div>
+    <div id="historyList" class="history-list"></div>
 
-                <!-- Submit Action -->
-                <div class="pt-4">
-                    <button type="submit" id="generateBtn" class="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 dark:bg-brand dark:hover:bg-brand-dark text-white font-medium text-sm rounded-lg shadow-md transition-all flex items-center justify-center gap-2 animate-pulse-glow">
-                        <i class="fas fa-bolt text-amber-400 dark:text-white"></i> Build Architecture
-                    </button>
-                </div>
-            </form>
+    <div id="undoBox" class="undo-box">
+        Deleted ✔ <button id="undoDelete">Undo</button>
+    </div>
 
-            <!-- Export Actions (Hidden initially) -->
-            <div id="actionButtons" class="hidden flex-col gap-3 mt-8 pt-8 border-t border-slate-200 dark:border-slate-800 animate-fade-in no-print">
-                <p class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Export Options</p>
-                <button onclick="window.print()" class="w-full py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium text-sm rounded-lg border border-slate-200 dark:border-slate-700 transition-colors flex items-center justify-center gap-2 shadow-sm">
-                    <i class="fas fa-print"></i> Save as PDF
-                </button>
-                <button onclick="copyToClipboard()" id="copyBtn" class="w-full py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium text-sm rounded-lg border border-slate-200 dark:border-slate-700 transition-colors flex items-center justify-center gap-2 shadow-sm">
-                    <i class="fab fa-markdown"></i> Copy Markdown
-                </button>
-                <button onclick="location.reload()" class="w-full py-2.5 mt-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 font-medium text-sm rounded-lg transition-colors flex items-center justify-center gap-2">
-                    <i class="fas fa-undo"></i> Reset Canvas
-                </button>
-            </div>
-        </div>
-    </aside>
-
-    <!-- Main Content Area -->
-    <main id="mainContent" class="flex-1 h-full overflow-y-auto bg-slate-50 dark:bg-slate-950 relative">
-        
-        <!-- Empty State -->
-        <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center p-8 text-center opacity-100 transition-opacity duration-500">
-            <div class="w-24 h-24 mb-6 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-300 dark:text-slate-700">
-                <i class="fas fa-project-diagram text-4xl"></i>
-            </div>
-            <h2 class="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-2">Workspace Ready</h2>
-            <p class="text-sm text-slate-500 dark:text-slate-400 max-w-sm">Configure your parameters in the sidebar to dynamically generate a structured curriculum architecture.</p>
-        </div>
-
-        <!-- Loader State -->
-        <div id="loader" class="hidden absolute inset-0 flex-col items-center justify-center p-8 text-center bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-sm z-10 no-print">
-            <i class="fas fa-circle-notch text-4xl text-brand animate-spin-slow mb-6"></i>
-            <h3 class="text-lg font-medium text-slate-900 dark:text-white mb-2">Assembling Nodes</h3>
-            <p id="loaderText" class="text-sm text-slate-500 dark:text-slate-400 max-w-sm transition-opacity duration-300">Querying intelligence models...</p>
-        </div>
-
-        <!-- Result Canvas -->
-        <div id="printArea" class="hidden w-full max-w-4xl mx-auto p-6 md:p-12 pb-24">
-            <div id="resultContainer" class="animate-fade-in">
-                <!-- Data injected here -->
-            </div>
-        </div>
-    </main>
-
-    <script>
-        // --- Theme Management ---
-        const themeToggle = document.getElementById('themeToggle');
-        const htmlElement = document.documentElement;
-        
-        // Auto-detect system preference
-        if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-            htmlElement.classList.add('dark');
-        } else {
-            htmlElement.classList.remove('dark');
-        }
-
-        themeToggle.addEventListener('click', () => {
-            htmlElement.classList.toggle('dark');
-            localStorage.setItem('theme', htmlElement.classList.contains('dark') ? 'dark' : 'light');
-        });
-
-        // --- Mock Data Generator ---
-        function generateMockData(stream, duration) {
-            const months = parseInt(duration);
-            let totalModules = months === 3 ? 3 : (months === 6 ? 6 : 12);
-            
-            let curriculum = {};
-            for(let i = 1; i <= totalModules; i++) {
-                curriculum[`Phase ${i}: ${i <= totalModules/3 ? 'Core Foundations' : (i <= (totalModules*2/3) ? 'Advanced Execution' : 'Mastery & Scale')}`] = [
-                    {
-                        course_title: `${stream} Theory & Mechanics`,
-                        course_description: `A deep dive into the underlying architecture and theoretical framework required to master ${stream}.`,
-                        topics: [
-                            `Fundamentals of ${stream}`,
-                            "Data pipelines and structuring",
-                            "Algorithmic evaluation metrics",
-                            "Ethical considerations and bias"
-                        ]
-                    },
-                    {
-                        course_title: `Applied Engineering Workshop`,
-                        course_description: `Practical, hands-on labs where theoretical concepts are translated into working prototypes.`,
-                        topics: [
-                            "Setting up the dev environment",
-                            "Building the V1 prototype",
-                            "Debugging and optimization"
-                        ]
-                    }
-                ];
-            }
-            return curriculum;
-        }
-
-        const apiKey = ""; // API Key provided automatically by the execution environment
-        let rawGeneratedData = null; 
-
-        async function generateRealData(stream, duration, level) {
-            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-            const prompt = `Act as a senior curriculum architect. Design a highly structured, professional curriculum for ${stream}. The timeframe is ${duration} and the target skill level is ${level}. Return an organized set of phases/semesters containing courses, short technical descriptions, and specific bulleted topics.`;
-            
-            const payload = {
-                contents: [{ parts: [{ text: prompt }] }],
-                systemInstruction: {
-                    parts: [{ text: "You must return ONLY valid JSON matching the schema. No markdown wrapping. Be technical, structured, and practical." }]
-                },
-                generationConfig: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: "OBJECT",
-                        properties: {
-                            curriculum: {
-                                type: "OBJECT",
-                                description: "Keys should be the Phase or Month (e.g. 'Phase 1: Foundations'). Values are arrays of courses.",
-                                additionalProperties: {
-                                    type: "ARRAY",
-                                    items: {
-                                        type: "OBJECT",
-                                        properties: {
-                                            course_title: { type: "STRING" },
-                                            course_description: { type: "STRING", description: "Brief technical description of the course." },
-                                            topics: {
-                                                type: "ARRAY",
-                                                items: { type: "STRING" }
-                                            }
-                                        },
-                                        required: ["course_title", "course_description", "topics"]
-                                    }
-                                }
-                            }
-                        },
-                        required: ["curriculum"]
-                    }
-                }
-            };
-
-            for (let i = 0; i < 5; i++) {
-                try {
-                    const response = await fetch(endpoint, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(payload)
-                    });
-                    
-                    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
-                    
-                    const result = await response.json();
-                    const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
-                    if (!jsonText) throw new Error("Invalid response format");
-                    
-                    const parsed = JSON.parse(jsonText);
-                    return parsed.curriculum;
-                } catch (error) {
-                    if (i === 4) throw error;
-                    await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
-                }
-            }
-        }
-
-        // --- Form Submission Logic ---
-        document.getElementById('curriculumForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const stream = document.getElementById('stream').value;
-            const duration = document.getElementById('duration').value;
-            const level = document.getElementById('level').value;
-            
-            // UI State Changes
-            const btn = document.getElementById('generateBtn');
-            const originalBtnHtml = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
-            
-            document.getElementById('emptyState').classList.add('hidden');
-            document.getElementById('printArea').classList.add('hidden');
-            document.getElementById('loader').classList.remove('hidden');
-            document.getElementById('loader').classList.add('flex');
-
-            // Dynamic Loader Text
-            const loadingMessages = [
-                "Querying intelligence models...",
-                "Structuring logical pathways...",
-                "Defining core modules...",
-                "Finalizing document architecture..."
-            ];
-            let msgIndex = 0;
-            const loaderTextSpan = document.getElementById('loaderText');
-            loaderTextSpan.innerText = loadingMessages[0];
-            const loadInterval = setInterval(() => {
-                msgIndex = (msgIndex + 1) % loadingMessages.length;
-                loaderTextSpan.style.opacity = '0';
-                setTimeout(() => {
-                    loaderTextSpan.innerText = loadingMessages[msgIndex];
-                    loaderTextSpan.style.opacity = '1';
-                }, 300);
-            }, 2000);
-
-            try {
-                let generatedData;
-                if (apiKey) {
-                    generatedData = await generateRealData(stream, duration, level);
-                } else {
-                    await new Promise(r => setTimeout(r, 3500)); // Simulate delay
-                    generatedData = generateMockData(stream, duration);
-                }
-                
-                rawGeneratedData = { stream, duration, level, curriculum: generatedData };
-                renderCurriculum(stream, duration, generatedData, level);
-                
-                // Reset UI
-                clearInterval(loadInterval);
-                document.getElementById('loader').classList.add('hidden');
-                document.getElementById('loader').classList.remove('flex');
-                document.getElementById('printArea').classList.remove('hidden');
-                document.getElementById('actionButtons').classList.remove('hidden');
-                document.getElementById('actionButtons').classList.add('flex');
-                
-                // On mobile, scroll down to the content automatically
-                if(window.innerWidth < 768) {
-                    document.getElementById('mainContent').scrollIntoView({ behavior: 'smooth' });
-                }
-
-            } catch (error) {
-                console.error(error);
-                clearInterval(loadInterval);
-                document.getElementById('loader').classList.add('hidden');
-                document.getElementById('loader').classList.remove('flex');
-                const container = document.getElementById('resultContainer');
-                container.innerHTML = `
-                    <div class="p-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-center">
-                        <i class="fas fa-exclamation-circle text-red-500 text-3xl mb-3"></i>
-                        <h3 class="text-red-800 dark:text-red-400 font-bold">Generation Failed</h3>
-                        <p class="text-sm text-red-600 dark:text-red-300 mt-1">Unable to construct architecture. Check API key or console.</p>
-                    </div>`;
-                document.getElementById('printArea').classList.remove('hidden');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = originalBtnHtml;
-            }
-        });
-
-        // --- Copy to Clipboard Logic ---
-        function copyToClipboard() {
-            if (!rawGeneratedData) return;
-            
-            let markdown = `# Architecture: ${rawGeneratedData.stream}\n`;
-            markdown += `> **Duration:** ${rawGeneratedData.duration} | **Proficiency:** ${rawGeneratedData.level}\n\n`;
-            
-            for (const [semester, courses] of Object.entries(rawGeneratedData.curriculum)) {
-                markdown += `## ${semester}\n\n`;
-                courses.forEach(course => {
-                    markdown += `### ${course.course_title}\n`;
-                    if (course.course_description) markdown += `_${course.course_description}_\n\n`;
-                    course.topics.forEach(topic => {
-                        markdown += `- ${topic}\n`;
-                    });
-                    markdown += `\n`;
-                });
-            }
-
-            const onSuccess = () => {
-                const copyBtn = document.getElementById('copyBtn');
-                const originalHtml = copyBtn.innerHTML;
-                copyBtn.innerHTML = '<i class="fas fa-check text-green-500"></i> Copied to Clipboard';
-                setTimeout(() => { copyBtn.innerHTML = originalHtml; }, 2000);
-            };
-
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(markdown).then(onSuccess);
-            } else {
-                let textArea = document.createElement("textarea");
-                textArea.value = markdown;
-                document.body.appendChild(textArea);
-                textArea.select();
-                try { document.execCommand('copy'); onSuccess(); } catch (err) { console.error(err); }
-                document.body.removeChild(textArea);
-            }
-        }
-
-        // --- Render Function (Flat Dashboard Cards) ---
-        function renderCurriculum(stream, duration, data, level) {
-            const container = document.getElementById('resultContainer');
-            
-            // Generate Header
-            let html = `
-                <div class="mb-10 print-border print-bg-white print:p-6 print:rounded-lg border-b border-slate-200 dark:border-slate-800 pb-8">
-                    <p class="text-brand font-bold tracking-wider uppercase text-xs mb-2">Curriculum Architecture</p>
-                    <h2 class="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white mb-4 tracking-tight">${stream}</h2>
-                    <div class="flex flex-wrap items-center gap-3">
-                        <span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-md text-xs font-semibold border border-slate-200 dark:border-slate-700"><i class="far fa-clock mr-1.5"></i>${duration}</span>
-                        <span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-md text-xs font-semibold border border-slate-200 dark:border-slate-700"><i class="fas fa-signal mr-1.5"></i>${level} Track</span>
-                    </div>
-                </div>
-                <div class="space-y-12">
-            `;
-
-            for (const [semester, courses] of Object.entries(data)) {
-                html += `
-                    <div class="print-break">
-                        <div class="flex items-center gap-4 mb-6">
-                            <h3 class="text-xl font-bold text-slate-800 dark:text-white">${semester}</h3>
-                            <div class="flex-1 h-px bg-slate-200 dark:bg-slate-800"></div>
-                        </div>
-                        
-                        <div class="grid grid-cols-1 gap-6">
-                `;
-
-                courses.forEach((course, index) => {
-                    html += `
-                            <div class="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm print-border print-bg-white relative overflow-hidden group">
-                                <div class="absolute left-0 top-0 bottom-0 w-1 bg-brand opacity-50 group-hover:opacity-100 transition-opacity"></div>
-                                
-                                <div class="flex flex-col md:flex-row md:items-start gap-4 md:gap-8">
-                                    <div class="md:w-1/3">
-                                        <h4 class="text-lg font-bold text-slate-900 dark:text-white mb-2 leading-tight">${course.course_title}</h4>
-                                        ${course.course_description ? `<p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">${course.course_description}</p>` : ''}
-                                    </div>
-                                    
-                                    <div class="md:w-2/3 bg-slate-50 dark:bg-slate-950/50 p-4 rounded-lg border border-slate-100 dark:border-slate-800 print-border">
-                                        <ul class="space-y-2.5">
-                    `;
-                    
-                    course.topics.forEach(topic => {
-                        html += `
-                                            <li class="text-slate-700 dark:text-slate-300 text-sm flex items-start gap-3">
-                                                <i class="fas fa-check-circle text-brand/70 mt-0.5 text-[10px]"></i>
-                                                <span class="leading-tight">${topic}</span>
-                                            </li>
-                        `;
-                    });
-
-                    html += `
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                    `;
-                });
-
-                html += `
-                        </div>
-                    </div>
-                `;
-            }
-
-            html += `</div>`;
-            container.innerHTML = html;
-        }
-    </script>
+  </div>
+</div>
 </body>
 </html>

@@ -1,12 +1,37 @@
 {
-    "Semester 1": [
-        {
-            "course_title": "Introduction to Python Programming",
-            "topics": ["Basic syntax", "data types", "control structures", "functions", "file operations"]
+  "type": "object",
+  "properties": {
+    "curriculum": {
+      "type": "array",
+      "description": "An ordered list of phases for the learning path.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "phase_title": {
+            "type": "string",
+            "description": "The title of the phase, e.g., 'Phase 1' or 'Phase 2'"
+          },
+          "courses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "course_title": { "type": "string" },
+                "topics": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              },
+              "required": ["course_title", "topics"],
+              "additionalProperties": false
+            }
+          }
         },
-        {
-            "course_title": "Data Preprocessing and Cleaning",
-            "topics": ["Handling missing values", "data normalization", "feature scaling", "outlier detection"]
-        }
-    ]
+        "required": ["phase_title", "courses"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["curriculum"],
+  "additionalProperties": false
 }
