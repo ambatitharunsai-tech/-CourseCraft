@@ -5,7 +5,6 @@ const resultBox = document.getElementById("result");
 const loader = document.getElementById("loader");
 const toggleBtn = document.getElementById("themeToggle");
 const header = document.querySelector(".header-area");
-const downloadBtn = document.getElementById("downloadBtn");
 
 const historyPopup = document.getElementById("historyPopup");
 const historyList = document.getElementById("historyList");
@@ -45,7 +44,7 @@ function checkSpelling(word){
 ========================= */
 const setDarkMode = (dark) => {
     document.body.classList.toggle("dark", dark);
-    toggleBtn.textContent = dark ? "☀ Light Mode" : "🌙 Dark Mode";
+    if(toggleBtn) toggleBtn.textContent = dark ? "☀ Light Mode" : "🌙 Dark Mode";
     localStorage.setItem("theme", dark ? "dark" : "light");
 };
 
@@ -55,30 +54,10 @@ const systemPrefersDark = window.matchMedia && window.matchMedia('(prefers-color
 const isDark = savedTheme === "dark" || (savedTheme === null && systemPrefersDark);
 
 setDarkMode(isDark);
-toggleBtn.onclick = () => setDarkMode(!document.body.classList.contains("dark"));
 
-/* =========================
-   DOWNLOAD PDF
-========================= */
-downloadBtn.onclick = (e) => {
-    e.preventDefault();
-    const element = document.getElementById("result");
-    
-    if (!element || element.innerText.trim() === "") {
-        alert("Please generate a curriculum first!");
-        return;
-    }
-
-    const opt = {
-        margin:       0.5,
-        filename:     'Curriculum_Plan.pdf',
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true },
-        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-
-    html2pdf().set(opt).from(element).save();
-};
+if(toggleBtn) {
+    toggleBtn.onclick = () => setDarkMode(!document.body.classList.contains("dark"));
+}
 
 /* =========================
    HISTORY POPUP
@@ -93,9 +72,11 @@ document.querySelectorAll(".dropdown-content a").forEach(link=>{
     }
 });
 
-document.getElementById("closeHistory").onclick=()=>{
-    historyPopup.style.display="none";
-};
+if(document.getElementById("closeHistory")) {
+    document.getElementById("closeHistory").onclick=()=>{
+        historyPopup.style.display="none";
+    };
+}
 
 /* =========================
    LOAD HISTORY
@@ -141,7 +122,7 @@ function renderHistory(){
 
         div.innerHTML=`
             <div class="item-info" style="cursor: pointer; flex-grow: 1;">
-                ⭐ ${item.skill}
+                  ${item.skill}
                 <br>
                 <small>${item.duration} • ${item.timestamp}</small>
             </div>
@@ -196,147 +177,222 @@ async function deleteHistoryItem(id) {
 /* =========================
    CLEAR ALL HISTORY
 ========================= */
-document.getElementById("clearHistory").onclick = async () => {
-    if(!historyData.length) return;
-    
-    if(confirm("Are you sure you want to clear ALL history? This cannot be undone.")){
-        try {
-            const resp = await fetch("/clear-history", { method: "POST" });
-            if (resp.ok) {
-                // Only clear UI if backend confirms DB table is cleared
-                historyData = [];
-                renderHistory();
-            } else {
-                // Safely handle errors if the server sends back HTML instead of JSON
-                let errorMessage = `Server Error (${resp.status})`;
-                try {
-                    const data = await resp.json();
-                    errorMessage = data.error || errorMessage;
-                } catch(e) {
-                    console.warn("Could not parse error response from server.");
+if(document.getElementById("clearHistory")) {
+    document.getElementById("clearHistory").onclick = async () => {
+        if(!historyData.length) return;
+        
+        if(confirm("Are you sure you want to clear ALL history? This cannot be undone.")){
+            try {
+                const resp = await fetch("/clear-history", { method: "POST" });
+                if (resp.ok) {
+                    // Only clear UI if backend confirms DB table is cleared
+                    historyData = [];
+                    renderHistory();
+                } else {
+                    let errorMessage = `Server Error (${resp.status})`;
+                    try {
+                        const data = await resp.json();
+                        errorMessage = data.error || errorMessage;
+                    } catch(e) {
+                        console.warn("Could not parse error response from server.");
+                    }
+                    alert(`Could not clear history. ${errorMessage}\n\nMake sure your app.py is fully updated and running.`);
                 }
-                alert(`Could not clear history. ${errorMessage}\n\nMake sure your app.py is fully updated and running.`);
+            } catch (err) {
+                console.error("Failed to clear history:", err);
+                alert("Failed to communicate with the server. Is the Python backend running?");
             }
-        } catch (err) {
-            console.error("Failed to clear history:", err);
-            alert("Failed to communicate with the server. Is the Python backend running?");
         }
-    }
-};
+    };
+}
 
 /* =========================
    SEARCH HISTORY
 ========================= */
-historySearch.oninput=(e)=>{
- const val=e.target.value.toLowerCase();
- document.querySelectorAll(".history-item").forEach(item=>{
-    item.style.display=item.innerText.toLowerCase().includes(val)?"flex":"none";
- });
-};
+if(historySearch) {
+    historySearch.oninput=(e)=>{
+        const val=e.target.value.toLowerCase();
+        document.querySelectorAll(".history-item").forEach(item=>{
+            item.style.display=item.innerText.toLowerCase().includes(val)?"flex":"none";
+        });
+    };
+}
 
 /* =========================
    SORT BUTTONS
 ========================= */
-document.getElementById("sortNewest").onclick=()=>{
-    sortMode="newest";
-    renderHistory();
-};
+if(document.getElementById("sortNewest")) {
+    document.getElementById("sortNewest").onclick=()=>{
+        sortMode="newest";
+        renderHistory();
+    };
+}
 
-document.getElementById("sortOldest").onclick=()=>{
-    sortMode="oldest";
-    renderHistory();
-};
+if(document.getElementById("sortOldest")) {
+    document.getElementById("sortOldest").onclick=()=>{
+        sortMode="oldest";
+        renderHistory();
+    };
+}
 
 /* =========================
    EXPORT HISTORY
 ========================= */
-document.getElementById("exportHistory").onclick=()=>{
- const blob=new Blob([JSON.stringify(historyData,null,2)],{type:"application/json"});
- const a=document.createElement("a");
- a.href=URL.createObjectURL(blob);
- a.download="history.json";
- a.click();
-};
+if(document.getElementById("exportHistory")) {
+    document.getElementById("exportHistory").onclick=()=>{
+        const blob=new Blob([JSON.stringify(historyData,null,2)],{type:"application/json"});
+        const a=document.createElement("a");
+        a.href=URL.createObjectURL(blob);
+        a.download="history.json";
+        a.click();
+    };
+}
 
 /* =========================
    FORM SUBMIT
 ========================= */
-form.addEventListener("submit",async e=>{
- e.preventDefault();
- const submitBtn = form.querySelector('button[type="submit"]');
+if(form) {
+    form.addEventListener("submit",async e=>{
+        e.preventDefault();
+        const submitBtn = form.querySelector('button[type="submit"]');
 
- let skill=document.getElementById("stream").value.trim();
- skill = checkSpelling(skill);
- document.getElementById("stream").value = skill;
- const duration=document.getElementById("duration").value;
- const level=document.getElementById("level").value;
+        let skill=document.getElementById("stream").value.trim();
+        skill = checkSpelling(skill);
+        document.getElementById("stream").value = skill;
+        const duration=document.getElementById("duration").value;
+        
+        // Handle level defensively in case it's missing from DOM
+        const levelSelect=document.getElementById("level");
+        const level = levelSelect ? levelSelect.value : "Beginner";
 
- if(!skill) return;
+        if(!skill) return;
 
- submitBtn.disabled = true;
- loader.style.display="block";
- resultBox.innerHTML="";
- downloadBtn.style.display="none";
+        submitBtn.disabled = true;
+        loader.style.display="block";
+        resultBox.innerHTML="";
 
- try{
- const resp=await fetch("/generate",{
-  method:"POST",
-  headers:{"Content-Type":"application/json"},
-  body:JSON.stringify({skill,duration,level})
- });
+        try{
+            const resp=await fetch("/generate",{
+                method:"POST",
+                headers:{"Content-Type":"application/json"},
+                body:JSON.stringify({skill,duration,level})
+            });
 
- const data = await resp.json();
+            const data = await resp.json();
 
- loader.style.display="none";
- header.style.display="none";
- submitBtn.disabled = false;
+            loader.style.display="none";
+            header.style.display="none";
+            submitBtn.disabled = false;
 
- if(!resp.ok){
-   resultBox.innerHTML=".."+(data.error || "Server error");
-   return;
- }
+            if(!resp.ok){
+                resultBox.innerHTML="<p style='color:#ff4d4d; text-align:center;'>Error: " + (data.error || "Server error") + "</p>";
+                return;
+            }
 
- render(data,skill);
+            render(data,skill);
 
- }catch{
-   loader.style.display="none";
-   submitBtn.disabled = false;
-   resultBox.innerHTML="Cannot connect to server";
- }
-});
+        }catch{
+            loader.style.display="none";
+            submitBtn.disabled = false;
+            resultBox.innerHTML="<p style='color:#ff4d4d; text-align:center;'>Cannot connect to server. Is app.py running?</p>";
+        }
+    });
+}
 
 /* =========================
    RENDER CURRICULUM
 ========================= */
 function render(data,skill){
 
- if(!data || !data.curriculum){
-   resultBox.innerHTML="<p>Error generating curriculum</p>";
-   downloadBtn.style.display="none";
-   return;
- }
+    if(!data || !data.curriculum){
+        resultBox.innerHTML="<p style='text-align:center;'>Error generating curriculum</p>";
+        return;
+    }
 
- downloadBtn.style.display="block";
+    // Wrap the curriculum in a specific container so html2pdf can target just the content
+    let html = `
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid #667eea; padding-bottom: 10px; margin-bottom: 20px;">
+            <h2 style="margin:0;">${skill} Path</h2>
+            <button id="pdfBtn" style="padding:8px 15px; border-radius:8px; cursor:pointer; background: linear-gradient(to right, #667eea, #764ba2); color: white; border: none; font-weight: bold; font-size: 0.9rem;">
+                Download PDF
+            </button>
+        </div>
+        <div id="pdfContent">
+    `;
 
- let html=`<h2 style="text-align:center;">${skill} Path</h2>`;
+    data.curriculum.forEach(phase=>{
+        html+=`<div class="phase-title" style="margin-top: 20px; font-weight: bold; padding: 10px; background: rgba(102, 126, 234, 0.1); border-left: 4px solid #667eea; border-radius: 4px;">${phase.phase_title}</div>`;
+        
+        if (phase.courses) {
+            phase.courses.forEach(c=>{
+                html+=`<div style="margin-left: 10px;">`;
+                html+=`<h4 style="margin-bottom: 5px; margin-top: 15px; color: var(--text);">${c.course_title}</h4><ul style="margin-top: 0; color: var(--text);">`;
+                if (c.topics) {
+                    c.topics.forEach(t=> html+=`<li style="margin-bottom: 4px;">${t}</li>`);
+                }
+                html+=`</ul></div>`;
+            });
+        }
+    });
 
- data.curriculum.forEach(phase=>{
-   html+=`<div class="phase-title" style="margin-top: 20px; font-weight: bold; border-bottom: 2px solid #667eea;">${phase.phase_title}</div>`;
-   phase.courses.forEach(c=>{
-     html+=`<h4 style="margin-bottom: 5px;">${c.course_title}</h4><ul style="margin-top: 0;">`;
-     c.topics.forEach(t=> html+=`<li>${t}</li>`);
-     html+=`</ul>`;
-   });
- });
+    html += `</div>`; // Close pdfContent wrapper
+    resultBox.innerHTML=html;
 
- resultBox.innerHTML=html;
+    /* =========================
+       DOWNLOAD PDF (html2pdf)
+    ========================= */
+    const pdfBtn = document.getElementById("pdfBtn");
+    if(pdfBtn) {
+        pdfBtn.onclick = (e) => {
+            e.preventDefault();
+            
+            // Safety check if html2pdf isn't loaded via CDN
+            if (typeof html2pdf === 'undefined') {
+                alert("PDF generation library is not loaded. Ensure you have the html2pdf.js CDN in your index.html!");
+                return;
+            }
+
+            const element = document.getElementById("pdfContent");
+            const opt = {
+                margin:       0.5,
+                filename:     `${skill.replace(/\s+/g, '_')}_Curriculum.pdf`,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true },
+                jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+
+            const originalText = pdfBtn.textContent;
+            pdfBtn.textContent = "⌛ Generating...";
+            pdfBtn.disabled = true;
+
+            // Small timeout allows the button text to update before heavy PDF rendering begins
+            setTimeout(() => {
+                html2pdf().set(opt).from(element).save().then(() => {
+                    pdfBtn.textContent = "Downloaded";
+                    setTimeout(() => {
+                        pdfBtn.textContent = originalText;
+                        pdfBtn.disabled = false;
+                    }, 3000);
+                }).catch(err => {
+                    console.error("PDF generation failed:", err);
+                    pdfBtn.textContent = "Error";
+                    setTimeout(() => {
+                        pdfBtn.textContent = originalText;
+                        pdfBtn.disabled = false;
+                    }, 3000);
+                });
+            }, 100);
+        };
+    }
 }
 
 /* =========================
    SERVICE WORKER
 ========================= */
 if('serviceWorker' in navigator){
- navigator.serviceWorker.register('/sw.js');
+    navigator.serviceWorker.register('/sw.js').catch(err => {
+        // Suppress warning if sw.js simply hasn't been created yet
+    });
 }
 
 });
