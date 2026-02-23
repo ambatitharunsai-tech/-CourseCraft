@@ -1,25 +1,65 @@
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Curriculum",
+  "description": "A highly professional, accurately spelled, and well-structured learning path. YOU MUST USE STRICT, FLAWLESS ENGLISH TERMINOLOGY. ABSOLUTELY NO GIBBERISH OR TYPOS (e.g., never output nonsense like 'inkilligance' or 'Unerer'). Double-check all terminology against real-world educational standards before responding.",
   "type": "object",
   "properties": {
     "curriculum": {
       "type": "array",
-      "description": "An ordered list of phases for the learning path.",
+      "description": "An ordered list of chronological phases for the learning path. Must strictly progress from beginner to advanced.",
+      "minItems": 1,
+      "maxItems": 10,
       "items": {
         "type": "object",
         "properties": {
           "phase_title": {
             "type": "string",
-            "description": "The title of the phase, e.g., 'Phase 1' or 'Phase 2'"
+            "description": "The title of the phase. Must be professionally written and accurately spelled. Must follow the format 'Phase X: Title'.",
+            "pattern": "^Phase \\d+: .+$",
+            "minLength": 3,
+            "maxLength": 100,
+            "examples": [
+              "Phase 1: Core Fundamentals",
+              "Phase 2: Intermediate Concepts",
+              "Phase 3: Advanced Applications"
+            ]
           },
           "courses": {
             "type": "array",
+            "description": "A list of specific, real-world courses or modules within this phase.",
+            "minItems": 1,
+            "maxItems": 10,
             "items": {
               "type": "object",
               "properties": {
-                "course_title": { "type": "string" },
+                "course_title": { 
+                  "type": "string",
+                  "description": "The clear, professionally named title of the specific course. Must be a recognized, accurate real-world subject name with perfect English spelling.",
+                  "minLength": 3,
+                  "maxLength": 100,
+                  "examples": [
+                    "Data Structures and Algorithms",
+                    "Introduction to Artificial Intelligence",
+                    "Advanced System Design"
+                  ]
+                },
                 "topics": {
                   "type": "array",
-                  "items": { "type": "string" }
+                  "description": "A list of concise, real-world sub-topics or concepts covered in this course. NO HALLUCINATIONS. Use standard professional vocabulary.",
+                  "minItems": 1,
+                  "maxItems": 15,
+                  "items": { 
+                    "type": "string",
+                    "description": "A specific, accurately spelled technical topic. Limit to 5-7 words maximum. Only use recognized, real-world terminology. Do not end with a period.",
+                    "minLength": 2,
+                    "maxLength": 80,
+                    "examples": [
+                      "Linear Algebra basics",
+                      "Convolutional Neural Networks (CNNs)",
+                      "Memory management and pointers",
+                      "RESTful API integration"
+                    ]
+                  }
                 }
               },
               "required": ["course_title", "topics"],
