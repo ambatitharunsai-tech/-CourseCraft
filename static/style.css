@@ -17,7 +17,9 @@ body.dark {
 }
 
 html, body {
+    /* Use 100dvh so mobile browsers account for the address/nav bars dynamically */
     height: 100%;
+    height: 100dvh; 
     margin: 0;
     overflow: hidden;
     font-family: 'Segoe UI', sans-serif;
@@ -33,8 +35,9 @@ html, body {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 100vh;
-    padding: 15px;
+    height: 100%;
+    height: 100dvh;
+    padding: 10px; /* Reduced from 15px to save space */
     box-sizing: border-box;
 }
 
@@ -44,7 +47,7 @@ html, body {
     width: 100%;
     max-width: 800px !important;
     height: 100%;
-    max-height: 95vh;
+    max-height: 100%;
     padding: 30px !important;
     box-sizing: border-box;
     /* Modern Glassmorphic Effect */
@@ -104,8 +107,10 @@ body.dark .header-area p {
 ========================================= */
 .content-area {
     flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 0; /* CRITICAL FIX: Allows this div to shrink inside a flexbox so the button at the bottom isn't pushed out! */
     overflow-y: auto;
-    margin-bottom: 20px;
+    margin-bottom: 15px;
     padding-right: 10px;
     display: flex;
     flex-direction: column;
@@ -189,7 +194,7 @@ body.dark .select-row select option {
     background: rgba(255, 255, 255, 0.4) !important;
     backdrop-filter: blur(10px);
     transition: all 0.3s;
-    margin-bottom: 0;
+    margin-bottom: 15px;
     box-sizing: border-box;
     color: #333;
 }
@@ -247,7 +252,7 @@ body.dark #micBtn:hover {
 #curriculumForm button[type="submit"] {
     width: 70%;
     padding: 12px 20px;
-    margin-top: 20px;
+    margin-top: 15px;
     border-radius: 12px;
     font-size: 1.1rem;
     transition: all 0.3s ease;
@@ -539,49 +544,57 @@ body.dark .history-glass {
 }
 
 /* =========================================
-   PRINT MODE
+   📱 MOBILE FIXES (Solves the hidden button issue)
 ========================================= */
-@media print {
-    body * {
-        visibility: hidden;
+@media (max-width: 600px) {
+    .main-container {
+        padding: 5px; /* Extremely small padding to maximize space */
     }
-    #result, #result * {
-        visibility: visible;
+    
+    .form-container {
+        padding: 15px !important; /* Cut padding in half on phones */
+        border-radius: 15px !important;
+        max-height: calc(100dvh - 10px); /* Strictly fits the screen */
     }
-    #result {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
+    
+    .header-area h1 {
+        font-size: 1.6rem;
+        margin-bottom: 5px;
     }
-    button,
-    .menu-container,
-    .new-chat-btn,
-    #curriculumForm,
-    .header-area {
-        display: none !important;
+    
+    .header-area p {
+        font-size: 0.95rem;
     }
-    .phase-title {
-        background: #000 !important;
-        color: #fff !important;
+    
+    #stream {
+        padding: 10px 15px;
+        font-size: 0.95rem;
     }
-    body {
-        font-family: Arial, sans-serif;
-        color: #000;
-        background: white;
+    
+    .select-row {
+        gap: 8px; /* Less space between dropdowns */
     }
-    h2 {
-        text-align: center;
-        margin-bottom: 20px;
-        font-size: 22px;
+    
+    .select-row select {
+        padding: 8px 10px;
+        font-size: 0.85rem;
     }
-    h4 {
+    
+    #curriculumForm button[type="submit"] {
+        width: 100%; /* Make button full width so it's super easy to tap */
+        padding: 12px 20px;
         margin-top: 10px;
     }
-    ul {
-        margin-bottom: 12px;
+
+    /* Keep top menus inside view */
+    .menu-container {
+        top: 10px;
+        left: 10px;
     }
-    li {
-        margin-left: 10px;
+    .new-chat-btn {
+        top: 10px;
+        right: 10px;
+        padding: 6px 12px;
+        font-size: 0.8rem;
     }
 }
