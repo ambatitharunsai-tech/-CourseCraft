@@ -1,7 +1,13 @@
 from flask import Flask, request, jsonify, send_file, render_template
-import requests, json, re, os, io, datetime
+import requests
+import json
+import re
+import os
+import io
+import datetime
 from flask_sqlalchemy import SQLAlchemy
 
+# Initialize Flask
 app = Flask(__name__)
 
 # ---------------- DATABASE ----------------
@@ -29,20 +35,36 @@ def save_history(skill, duration, curriculum):
         curriculum=json.dumps(curriculum)
     )
     db.session.add(record)
+    
+    # Auto-cleanup: Keep only the latest 50 searches
+    count = SearchHistory.query.count()
+    if count > 50:
+        oldest_records = SearchHistory.query.order_by(SearchHistory.id.asc()).limit(count - 50).all()
+        for old in oldest_records:
+            db.session.delete(old)
+            
     db.session.commit()
 
 
 def parse_curriculum(text):
     """Extract JSON safely from AI response"""
     try:
-        # Improved stability: Clean out markdown code blocks that LLMs frequently output
+        # Clean out markdown code blocks that LLMs frequently output
         text = re.sub(r'```json\s*', '', text, flags=re.IGNORECASE)
         text = re.sub(r'```\s*', '', text)
         
         match = re.search(r'\{.*\}', text, re.S)
         if not match:
             return None
-        return json.loads(match.group())
+            
+        data = json.loads(match.group())
+        
+        # Standardize format
+        if "curriculum" in data:
+            return data
+        elif isinstance(data, list):
+            return {"curriculum": data}
+        return {"curriculum": [data]}
     except Exception as e:
         print(f"Error parsing curriculum JSON: {e}")
         return None
@@ -51,7 +73,7 @@ def parse_curriculum(text):
 def generate_curriculum(prompt):
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        return {"error": "Missing GROQ_API_KEY environment variable"}
+        return {"error": "Missing GROQ_API_KEY environment variable. Please set it in Render."}
 
     url = "https://api.groq.com/openai/v1/chat/completions"
 
@@ -63,27 +85,18 @@ def generate_curriculum(prompt):
     data = {
         "model": "llama-3.3-70b-versatile",
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3
+        "temperature": 0.3,
+        "response_format": {"type": "json_object"} 
     }
 
     try:
-        # Increased timeout to 90 seconds
         response = requests.post(url, headers=headers, json=data, timeout=90)
-
-        print("Status:", response.status_code)
-        print("Response:", response.text[:300])
-
         response.raise_for_status()
         result = response.json()
-
         return result["choices"][0]["message"]["content"]
 
     except requests.exceptions.RequestException as e:
-        print("Groq Error:", e)
-        # Improved: Capture the literal connection error (like ReadTimeout)
         error_details = f"LLM request failed: {str(e)}"
-        
-        # Improved: Extract exactly what Groq is complaining about if it's an HTTP error
         if hasattr(e, 'response') and e.response is not None:
             try:
                 error_details = e.response.json().get("error", {}).get("message", str(e))
@@ -91,6 +104,61 @@ def generate_curriculum(prompt):
                 error_details = f"HTTP {e.response.status_code}: {e.response.reason}"
                 
         return {"error": error_details}
+
+
+# ---------------- JSON SCHEMA DEFINITION ----------------
+# We define this strictly outside the route to avoid python f-string curly-brace escaping issues
+STRICT_SCHEMA = """
+{
+  "type": "object",
+  "properties": {
+    "curriculum": {
+      "type": "array",
+      "description": "Chronological learning phases. Strictly progress from beginner to advanced.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "phase_title": {
+            "type": "string",
+            "description": "Format: 'Phase X: [Dynamic Descriptive Title]'. Flawless spelling."
+          },
+          "phase_objective": {
+            "type": "string",
+            "description": "A dynamic, engaging 1-sentence summary of what the user will build or achieve."
+          },
+          "courses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "course_title": {
+                  "type": "string",
+                  "description": "Professional, accurate real-world subject name."
+                },
+                "practical_project": {
+                  "type": "string",
+                  "description": "Specific hands-on mini-project idea to apply concepts."
+                },
+                "topics": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "Concise, actionable sub-topic. 5-10 words maximum. Standard professional vocabulary."
+                  }
+                }
+              },
+              "required": ["course_title", "topics"]
+            }
+          }
+        },
+        "required": ["phase_title", "courses"]
+      }
+    }
+  },
+  "required": ["curriculum"]
+}
+"""
+
 
 # ---------------- ROUTES ----------------
 
@@ -105,34 +173,35 @@ def generate():
 
     skill = data.get("skill", "").strip()
     duration = data.get("duration", "6 Months")
+    level = data.get("level", "Beginner")
 
     if not skill:
         return jsonify({"error": "Skill cannot be empty"}), 400
 
+    # DYNAMIC TIME AND LEVEL INSTRUCTIONS
+    phase_instructions = ""
+    if "3" in duration:
+        phase_instructions = "This is a fast-paced, Intensive 3-Month Bootcamp. Create exactly 1 to 2 phases max. Focus on rapid skill acquisition."
+    elif "1" in duration or "year" in duration.lower():
+        phase_instructions = "This is a Comprehensive 1-Year Masterclass. Create exactly 4 to 6 phases. Build from foundations to highly advanced mastery."
+    else:
+        phase_instructions = "This is a Standard 6-Month Track. Create exactly 2 to 3 phases. Balance theory with practical implementation."
+
     prompt = f"""
-Create a structured learning curriculum for {skill}.
+    Create a highly structured, dynamic learning curriculum for a {level}-level student learning '{skill}'.
 
-Rules:
-- Provide clear phases
-- Each phase includes courses with topics
-- Return ONLY valid JSON
+    CRITICAL INSTRUCTIONS:
+    - {phase_instructions}
+    - Tailor the difficulty strictly to a '{level}' learner.
+    - YOU MUST USE STRICT, FLAWLESS ENGLISH TERMINOLOGY. ABSOLUTELY NO GIBBERISH OR TYPOS (e.g., no made up words like 'inkilligance').
+    - Output ONLY perfectly valid JSON that strictly adheres to the provided JSON Schema below. 
+    - Do not include markdown formatting or any chat text outside the JSON.
 
-Format:
-{{
- "curriculum":[
-   {{
-     "phase_title":"Phase 1",
-     "courses":[
-       {{
-         "course_title":"Course",
-         "topics":["topic1","topic2"]
-       }}
-     ]
-   }}
- ]
-}}
-"""
+    REQUIRED JSON SCHEMA:
+    {STRICT_SCHEMA}
+    """
 
+    print(f"Sending dynamic prompt to AI for {skill} ({duration} | {level})...")
     ai_response = generate_curriculum(prompt)
 
     if isinstance(ai_response, dict) and "error" in ai_response:
@@ -140,7 +209,7 @@ Format:
 
     structured = parse_curriculum(ai_response)
 
-    if not structured:
+    if not structured or "curriculum" not in structured:
         return jsonify({"error": "Invalid AI response. The model did not return valid JSON."}), 500
 
     save_history(skill, duration, structured["curriculum"])
@@ -154,7 +223,6 @@ def history():
 
     history_list = []
     for r in records:
-        # Improved stability: Prevent crash if DB contains malformed JSON
         try:
             curr_data = json.loads(r.curriculum)
         except json.JSONDecodeError:
@@ -202,6 +270,6 @@ def delete_history_item(item_id):
 
 if __name__ == "__main__":
     # Dynamically bind port for cloud server environments (like Render)
-    port = int(os.environ.get("PORT", 5051))
+    port = int(os.environ.get("PORT", 5050))
     print(f"Server running on port {port}")
     app.run(host="0.0.0.0", port=port)
