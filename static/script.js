@@ -7,6 +7,7 @@ const toggleBtn = document.getElementById("themeToggle");
 const header = document.querySelector(".header-area");
 
 const historyPopup = document.getElementById("historyPopup");
+const homePopup = document.getElementById("homePopup"); // Added Home Popup
 const historyList = document.getElementById("historyList");
 const historySearch = document.getElementById("historySearch");
 
@@ -33,10 +34,18 @@ fetch("/static/dictionaries/en_US.aff")
   })
   .catch(err => console.warn("Spellchecker initialization failed, continuing without it:", err));
 
-function checkSpelling(word){
-  if(!dictionary || dictionary.check(word)) return word;
-  const suggestions = dictionary.suggest(word);
-  return suggestions.length ? suggestions[0] : word;
+function checkSpelling(text){
+  if(!dictionary) return text;
+  
+  // Split phrases by space to check individual words. 
+  const words = text.split(/\s+/);
+  const correctedWords = words.map(w => {
+      if (dictionary.check(w)) return w;
+      const suggestions = dictionary.suggest(w);
+      return suggestions.length ? suggestions[0] : w;
+  });
+  
+  return correctedWords.join(" ");
 }
 
 /* =========================
@@ -60,14 +69,25 @@ if(toggleBtn) {
 }
 
 /* =========================
-   HISTORY POPUP
+   POPUP MENUS (HOME & HISTORY)
 ========================= */
-document.querySelectorAll(".dropdown-content a").forEach(link=>{
-    if(link.textContent.trim()==="History"){
-        link.onclick=(e)=>{
+document.querySelectorAll(".dropdown-content a").forEach(link => {
+    const linkText = link.textContent.trim().toLowerCase();
+    
+    // Open History
+    if(linkText.includes("history")){
+        link.onclick = (e) => {
             e.preventDefault();
             historyPopup.style.display="flex";
             loadHistory();
+        }
+    }
+    
+    // Open Home Popup
+    if(linkText.includes("home")){
+        link.onclick = (e) => {
+            e.preventDefault();
+            if(homePopup) homePopup.style.display = "flex";
         }
     }
 });
@@ -75,6 +95,18 @@ document.querySelectorAll(".dropdown-content a").forEach(link=>{
 if(document.getElementById("closeHistory")) {
     document.getElementById("closeHistory").onclick=()=>{
         historyPopup.style.display="none";
+    };
+}
+
+if(document.getElementById("closeHome")) {
+    document.getElementById("closeHome").onclick=()=>{
+        homePopup.style.display="none";
+    };
+}
+
+if(document.getElementById("startLearningBtn")) {
+    document.getElementById("startLearningBtn").onclick=()=>{
+        homePopup.style.display="none";
     };
 }
 
@@ -330,12 +362,28 @@ function render(data,skill){
         let phaseTitle = phase.phase_title || phase.title || phase.name || "Learning Phase";
         html+=`<div class="phase-title" style="margin-top: 20px; font-weight: bold; padding: 10px; background: rgba(102, 126, 234, 0.1); border-left: 4px solid #667eea; border-radius: 4px;">${phaseTitle}</div>`;
         
+        // Render Phase Objective if it exists
+        if (phase.phase_objective) {
+            html += `<div style="font-style: italic; color: var(--text); opacity: 0.85; margin-bottom: 15px; padding-left: 10px; font-size: 0.95rem;">
+                        🎯 <strong>Objective:</strong> ${phase.phase_objective}
+                     </div>`;
+        }
+
         let courses = phase.courses || phase.modules || phase.topics;
         if (Array.isArray(courses)) {
             courses.forEach(c=>{
                 let courseTitle = c.course_title || c.title || c.name || "Course Topic";
                 html+=`<div style="margin-left: 10px;">`;
-                html+=`<h4 style="margin-bottom: 5px; margin-top: 15px; color: var(--text);">${courseTitle}</h4><ul style="margin-top: 0; color: var(--text);">`;
+                html+=`<h4 style="margin-bottom: 5px; margin-top: 15px; color: var(--text);">${courseTitle}</h4>`;
+                
+                // Render Practical Project if it exists
+                if (c.practical_project) {
+                    html += `<div style="background: rgba(102, 126, 234, 0.1); border-left: 3px solid #764ba2; padding: 8px 10px; margin: 5px 0 10px 0; border-radius: 4px; font-size: 0.9rem; color: var(--text);">
+                                🛠️ <strong>Project:</strong> ${c.practical_project}
+                             </div>`;
+                }
+
+                html+=`<ul style="margin-top: 0; color: var(--text);">`;
                 
                 if (Array.isArray(c.topics)) {
                     c.topics.forEach(t=> html+=`<li style="margin-bottom: 4px;">${t}</li>`);
@@ -368,7 +416,6 @@ function render(data,skill){
             pdfBtn.disabled = true;
 
             // 1. Build a "Virtual Container" specifically formatted for printing.
-            // This prevents Dark Mode, scrollbars, or weird screen sizes from messing up the PDF.
             const printContainer = document.createElement("div");
             let printHtml = `
                 <div style="font-family: Arial, sans-serif; color: #333; padding: 20px; max-width: 800px; margin: 0 auto;">
@@ -385,8 +432,16 @@ function render(data,skill){
                         <h2 style="background-color: #edf2f7; color: #2d3748; padding: 12px; border-left: 5px solid #667eea; border-radius: 4px; font-size: 20px; margin-top: 0;">
                             ${pTitle}
                         </h2>
-                        <div style="padding-left: 15px;">
                 `;
+                
+                // Render Phase Objective for PDF
+                if (phase.phase_objective) {
+                    printHtml += `<p style="font-style: italic; color: #4a5568; margin-top: 5px; margin-bottom: 15px; font-size: 14px; padding-left: 15px;">
+                                    <strong>Objective:</strong> ${phase.phase_objective}
+                                  </p>`;
+                }
+
+                printHtml += `<div style="padding-left: 15px;">`;
                 
                 let coursesList = phase.courses || phase.modules || phase.topics || [];
                 if (Array.isArray(coursesList)) {
@@ -397,8 +452,18 @@ function render(data,skill){
                                 <h3 style="color: #2b6cb0; font-size: 16px; margin-bottom: 8px;">
                                     ${cTitle}
                                 </h3>
-                                <ul style="margin: 0; padding-left: 20px; color: #4a5568; font-size: 14px; line-height: 1.6;">
                         `;
+                        
+                        // Render Practical Project for PDF
+                        if (c.practical_project) {
+                            printHtml += `
+                                <div style="background-color: #f7fafc; border-left: 3px solid #805ad5; padding: 8px; margin-bottom: 10px; font-size: 14px; color: #2d3748; border-radius: 2px;">
+                                    <strong>🛠️ Project:</strong> ${c.practical_project}
+                                </div>
+                            `;
+                        }
+
+                        printHtml += `<ul style="margin: 0; padding-left: 20px; color: #4a5568; font-size: 14px; line-height: 1.6;">`;
                         
                         let topicsList = Array.isArray(c.topics) ? c.topics : typeof c.topics === "string" ? [c.topics] : ["General Concepts"];
                         topicsList.forEach(t => {
