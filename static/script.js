@@ -25,7 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
     window.onload = function() {
         if (typeof google !== 'undefined') {
             google.accounts.id.initialize({
-                client_id: "1234567890-abcdefg123456.apps.googleusercontent.com", // REPLACE WITH REAL CLIENT ID
+                client_id: "1052463353443-ovsiemfnpl7hka2ejk62co1915ilgq7e.apps.googleusercontent.com", // REPLACE WITH REAL CLIENT ID
                 callback: handleCredentialResponse
             });
             // Render inside login limit modal
@@ -335,4 +335,5 @@ document.addEventListener("DOMContentLoaded", () => {
         };
     }
 });
+
 
