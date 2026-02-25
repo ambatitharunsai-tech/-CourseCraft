@@ -1,524 +1,337 @@
 document.addEventListener("DOMContentLoaded", () => {
 
-const form = document.getElementById("curriculumForm");
-const resultBox = document.getElementById("result");
-const loader = document.getElementById("loader");
-const toggleBtn = document.getElementById("themeToggle");
-const header = document.querySelector(".header-area");
-
-const historyPopup = document.getElementById("historyPopup");
-const homePopup = document.getElementById("homePopup"); // Added Home Popup
-const historyList = document.getElementById("historyList");
-const historySearch = document.getElementById("historySearch");
-
-let historyData = [];
-let sortMode = "newest";
-
-/* =========================
-   SPELL CHECKER
-========================= */
-let dictionary;
-
-fetch("/static/dictionaries/en_US.aff")
-  .then(res => {
-      if (!res.ok) throw new Error("Dictionary affix file not found");
-      return fetch("/static/dictionaries/en_US.dic");
-  })
-  .then(res => {
-      if (!res.ok) throw new Error("Dictionary words file not found");
-      dictionary = new Typo("en_US",
-        "/static/dictionaries/en_US.aff",
-        "/static/dictionaries/en_US.dic",
-        { platform: "any" }
-      );
-  })
-  .catch(err => console.warn("Spellchecker initialization failed, continuing without it:", err));
-
-function checkSpelling(text){
-  if(!dictionary) return text;
-  
-  // Split phrases by space to check individual words. 
-  const words = text.split(/\s+/);
-  const correctedWords = words.map(w => {
-      if (dictionary.check(w)) return w;
-      const suggestions = dictionary.suggest(w);
-      return suggestions.length ? suggestions[0] : w;
-  });
-  
-  return correctedWords.join(" ");
-}
-
-/* =========================
-   DARK MODE
-========================= */
-const setDarkMode = (dark) => {
-    document.body.classList.toggle("dark", dark);
-    if(toggleBtn) toggleBtn.textContent = dark ? "☀ Light Mode" : "🌙 Dark Mode";
-    localStorage.setItem("theme", dark ? "dark" : "light");
-};
-
-// Check for system preference if localStorage is empty
-const savedTheme = localStorage.getItem("theme");
-const systemPrefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-const isDark = savedTheme === "dark" || (savedTheme === null && systemPrefersDark);
-
-setDarkMode(isDark);
-
-if(toggleBtn) {
-    toggleBtn.onclick = () => setDarkMode(!document.body.classList.contains("dark"));
-}
-
-/* =========================
-   POPUP MENUS (HOME & HISTORY)
-========================= */
-document.querySelectorAll(".dropdown-content a").forEach(link => {
-    const linkText = link.textContent.trim().toLowerCase();
+    // Core Elements
+    const form = document.getElementById("curriculumForm");
+    const resultBox = document.getElementById("result");
+    const loader = document.getElementById("loader");
+    const toggleBtn = document.getElementById("themeToggle");
+    const header = document.querySelector(".header-area");
     
-    // Open History
-    if(linkText.includes("history")){
-        link.onclick = (e) => {
+    // History & User elements
+    const historyPopup = document.getElementById("historyPopup");
+    const historyList = document.getElementById("historyList");
+    const loginModal = document.getElementById("loginModal");
+    const profilePopup = document.getElementById("profilePopup");
+    const profileContent = document.getElementById("profileContent");
+    const openHistoryBtn = document.getElementById("openHistoryBtn");
+
+    let historyData = [];
+    let sortMode = "newest";
+    let currentUserState = { logged_in: false, guest_left: 3 };
+
+    /* =========================
+       INITIALIZE GOOGLE AUTH
+    ========================= */
+    window.onload = function() {
+        if (typeof google !== 'undefined') {
+            google.accounts.id.initialize({
+                client_id: "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com", // REPLACE WITH REAL CLIENT ID
+                callback: handleCredentialResponse
+            });
+            // Render inside login limit modal
+            google.accounts.id.renderButton(
+                document.getElementById("googleSignInModalTarget"),
+                { theme: "outline", size: "large" }
+            );
+            // Render inside profile popup
+            google.accounts.id.renderButton(
+                document.getElementById("googleSignInProfileTarget"),
+                { theme: "outline", size: "large" }
+            );
+        }
+        checkAuthStatus(); // Load initial profile state
+    };
+
+    async function handleCredentialResponse(response) {
+        try {
+            const res = await fetch('/auth/google', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: response.credential })
+            });
+            const data = await res.json();
+            if(data.success) {
+                loginModal.style.display = 'none';
+                alert(`Welcome, ${data.name}! Your progress will now be saved.`);
+                checkAuthStatus();
+            } else {
+                alert("Login Error: " + data.error);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    // Bypass for users testing without real Google Client Credentials
+    window.devBypassLogin = async function() {
+        try {
+            const res = await fetch('/auth/google', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dev_bypass: true })
+            });
+            const data = await res.json();
+            if(data.success) {
+                loginModal.style.display = 'none';
+                alert(`Test Login Success! Welcome, ${data.name}!`);
+                checkAuthStatus();
+            }
+        } catch(err) { console.error(err); }
+    };
+
+    /* =========================
+       CHECK USER QUOTA & STATUS
+    ========================= */
+    async function checkAuthStatus() {
+        try {
+            const res = await fetch('/api/user');
+            currentUserState = await res.json();
+            updateProfileUI();
+        } catch (e) {
+            console.error("Failed to fetch user state", e);
+        }
+    }
+
+    function updateProfileUI() {
+        const targetGoogleBtn = document.getElementById("googleSignInProfileTarget");
+        
+        if (currentUserState.logged_in) {
+            profileContent.innerHTML = `
+                <h2 style="margin: 0 0 5px 0; font-size: 1.8rem;">${currentUserState.name}</h2>
+                <p style="margin: 0 0 25px 0; color: #64748b;">${currentUserState.email || 'Verified Student'}</p>
+                <div style="background: var(--input-bg); padding: 20px; border-radius: 20px; margin-bottom: 20px;">
+                    <h3 style="margin: 0; color: var(--aurora-2); font-size: 1.6rem;">${currentUserState.searches}</h3>
+                    <p style="margin: 0; font-size: 0.9rem; color: #64748b; font-weight: 600;">Total Curriculums Built</p>
+                </div>
+                <button onclick="logout()" style="padding: 12px 25px; border-radius: 50px; cursor: pointer; background: transparent; color: #ff4d4d; border: 2px solid #ff4d4d; font-weight: bold; width: 100%;">Logout</button>
+            `;
+            targetGoogleBtn.style.display = "none";
+        } else {
+            profileContent.innerHTML = `
+                <h2 style="margin: 0 0 5px 0; font-size: 1.8rem;">Guest Explorer</h2>
+                <p style="margin: 0 0 25px 0; color: #64748b;">Log in to unlock unlimited history tracking</p>
+                <div style="background: var(--input-bg); padding: 20px; border-radius: 20px; margin-bottom: 10px;">
+                    <h3 style="margin: 0; color: var(--aurora-1); font-size: 1.6rem;">${currentUserState.guest_left} / 3</h3>
+                    <p style="margin: 0; font-size: 0.9rem; color: #64748b; font-weight: 600;">Free Searches Left</p>
+                </div>
+            `;
+            targetGoogleBtn.style.display = "flex";
+        }
+    }
+
+    window.logout = async function() {
+        await fetch('/auth/logout', { method: 'POST' });
+        profilePopup.style.display = "none";
+        alert("You have been logged out.");
+        checkAuthStatus();
+        resultBox.innerHTML = ""; // Clear screen
+    }
+
+    /* =========================
+       THEME & SPELLING
+    ========================= */
+    const setDarkMode = (dark) => {
+        document.body.classList.toggle("dark", dark);
+        toggleBtn.textContent = dark ? "☀ Light Mode" : "🌙 Dark Mode";
+        localStorage.setItem("theme", dark ? "dark" : "light");
+    };
+    const savedTheme = localStorage.getItem("theme");
+    const isDark = savedTheme === "dark" || (savedTheme === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    setDarkMode(isDark);
+    toggleBtn.onclick = () => setDarkMode(!document.body.classList.contains("dark"));
+
+    /* =========================
+       FORM SUBMISSION
+    ========================= */
+    if (form) {
+        form.addEventListener("submit", async e => {
             e.preventDefault();
-            historyPopup.style.display="flex";
+            const submitBtn = form.querySelector('button[type="submit"]');
+
+            let skill = document.getElementById("stream").value.trim();
+            const duration = document.getElementById("duration").value;
+            const level = document.getElementById("level").value;
+
+            if (!skill) return;
+
+            submitBtn.disabled = true;
+            loader.style.display = "block";
+            resultBox.innerHTML = "";
+
+            try {
+                const resp = await fetch("/generate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ skill, duration, level })
+                });
+                
+                let data;
+                try {
+                    data = await resp.json();
+                } catch (jsonErr) {
+                    throw new Error(`Server crashed and returned HTML (Status ${resp.status}). Check your python terminal.`);
+                }
+
+                loader.style.display = "none";
+                submitBtn.disabled = false;
+
+                // Handle limit reached scenario
+                if (resp.status === 403 && data && data.error === "limit_reached") {
+                    loginModal.style.display = "flex";
+                    return; 
+                }
+
+                if (!resp.ok) {
+                    resultBox.innerHTML = "<p style='color:#ff4d4d; text-align:center;'>Error: " + (data.error || "Server error") + "</p>";
+                    return;
+                }
+
+                header.style.display = "none";
+                render(data, skill);
+                checkAuthStatus(); // Update count
+            } catch (err) {
+                console.error("Fetch Error:", err);
+                loader.style.display = "none";
+                submitBtn.disabled = false;
+                resultBox.innerHTML = `<p style='color:#ff4d4d; text-align:center;'>Connection Error: ${err.message}</p>`;
+            }
+        });
+    }
+
+    /* =========================
+       HISTORY LOGIC
+    ========================= */
+    openHistoryBtn.onclick = (e) => {
+        e.preventDefault();
+        document.getElementById('myDropdown').classList.remove('show');
+        historyPopup.style.display = "flex";
+        
+        if (!currentUserState.logged_in) {
+            document.getElementById("historyAuthWarning").style.display = "block";
+            document.getElementById("historyContentBlock").style.display = "none";
+        } else {
+            document.getElementById("historyAuthWarning").style.display = "none";
+            document.getElementById("historyContentBlock").style.display = "block";
             loadHistory();
         }
-    }
-    
-    // Open Home Popup
-    if(linkText.includes("home")){
-        link.onclick = (e) => {
-            e.preventDefault();
-            if(homePopup) homePopup.style.display = "flex";
-        }
-    }
-});
-
-if(document.getElementById("closeHistory")) {
-    document.getElementById("closeHistory").onclick=()=>{
-        historyPopup.style.display="none";
     };
-}
 
-if(document.getElementById("closeHome")) {
-    document.getElementById("closeHome").onclick=()=>{
-        homePopup.style.display="none";
-    };
-}
+    document.getElementById("closeHistory").onclick = () => { historyPopup.style.display = "none"; };
 
-if(document.getElementById("startLearningBtn")) {
-    document.getElementById("startLearningBtn").onclick=()=>{
-        homePopup.style.display="none";
-    };
-}
-
-/* =========================
-   LOAD HISTORY
-========================= */
-async function loadHistory(){
-    try{
-        const resp = await fetch("/history");
-        historyData = await resp.json();
-        renderHistory();
-    }catch{
-        historyList.innerHTML="<p>Unable to load history</p>";
-    }
-}
-
-/* =========================
-   RENDER HISTORY
-========================= */
-function renderHistory(){
-    historyList.innerHTML="";
-
-    if(!historyData.length){
-        historyList.innerHTML="<p style='text-align:center;'>No history yet</p>";
-        return;
-    }
-
-    let data = [...historyData];
-
-    // Safely parse dates from backend (replaces space with 'T' for Safari compatibility)
-    const parseDate = (dateStr) => new Date(dateStr.replace(" ", "T"));
-
-    data.sort((a,b)=>{
-        return sortMode === "newest"
-            ? parseDate(b.timestamp) - parseDate(a.timestamp)
-            : parseDate(a.timestamp) - parseDate(b.timestamp);
-    });
-
-    data.forEach(item=>{
-        const div=document.createElement("div");
-        div.className="history-item";
-        div.style.display = "flex";
-        div.style.justifyContent = "space-between";
-        div.style.alignItems = "center";
-
-        div.innerHTML=`
-            <div class="item-info" style="cursor: pointer; flex-grow: 1;">
-                ⭐ ${item.skill}
-                <br>
-                <small>${item.duration} • ${item.timestamp}</small>
-            </div>
-            <button class="delete-btn" style="background: transparent; border: none; color: #ff4d4d; font-size: 1.2rem; cursor: pointer; padding: 5px; margin-left: 10px;" title="Delete Entry">🗑</button>
-        `;
-
-        // Load curriculum on click
-        div.querySelector('.item-info').onclick=()=>{
-            render({curriculum:item.curriculum}, item.skill);
-            historyPopup.style.display="none";
-        };
-
-        // Delete Individual item on click
-        div.querySelector('.delete-btn').onclick= async (e)=>{
-            e.stopPropagation(); // Prevents loading the curriculum
-            if(confirm(`Are you sure you want to delete '${item.skill}' from history?`)){
-                await deleteHistoryItem(item.id);
-            }
-        };
-
-        historyList.appendChild(div);
-    });
-}
-
-/* =========================
-   DELETE INDIVIDUAL ITEM
-========================= */
-async function deleteHistoryItem(id) {
-    try {
-        const resp = await fetch(`/delete-history/${id}`, { method: "POST" });
-        if (resp.ok) {
-            // Only remove from UI if backend confirms deletion
-            historyData = historyData.filter(item => item.id !== id);
+    async function loadHistory() {
+        try {
+            const resp = await fetch("/history");
+            if (resp.status === 401) return; // Unauthorized handled by UI
+            historyData = await resp.json();
             renderHistory();
-        } else {
-            // Safely handle errors if the server sends back HTML instead of JSON
-            let errorMessage = `Server Error (${resp.status})`;
-            try {
-                const data = await resp.json();
-                errorMessage = data.error || errorMessage;
-            } catch(e) {
-                console.warn("Could not parse error response from server.");
-            }
-            alert(`Could not delete item. ${errorMessage}\n\nMake sure your app.py is fully updated and running.`);
+        } catch {
+            historyList.innerHTML = "<p>Unable to load history</p>";
         }
-    } catch (err) {
-        console.error("Failed to delete item:", err);
-        alert("Failed to communicate with the server. Is the Python backend running?");
     }
-}
 
-/* =========================
-   CLEAR ALL HISTORY
-========================= */
-if(document.getElementById("clearHistory")) {
-    document.getElementById("clearHistory").onclick = async () => {
-        if(!historyData.length) return;
-        
-        if(confirm("Are you sure you want to clear ALL history? This cannot be undone.")){
-            try {
-                const resp = await fetch("/clear-history", { method: "POST" });
-                if (resp.ok) {
-                    // Only clear UI if backend confirms DB table is cleared
-                    historyData = [];
-                    renderHistory();
-                } else {
-                    let errorMessage = `Server Error (${resp.status})`;
-                    try {
-                        const data = await resp.json();
-                        errorMessage = data.error || errorMessage;
-                    } catch(e) {
-                        console.warn("Could not parse error response from server.");
-                    }
-                    alert(`Could not clear history. ${errorMessage}\n\nMake sure your app.py is fully updated and running.`);
+    function renderHistory() {
+        historyList.innerHTML = "";
+        if (!historyData.length) {
+            historyList.innerHTML = "<p style='text-align:center; padding: 20px;'>No curriculums generated yet.</p>";
+            return;
+        }
+
+        let data = [...historyData];
+        const parseDate = (dateStr) => new Date(dateStr.replace(" ", "T"));
+        data.sort((a, b) => sortMode === "newest" ? parseDate(b.timestamp) - parseDate(a.timestamp) : parseDate(a.timestamp) - parseDate(b.timestamp));
+
+        data.forEach(item => {
+            const div = document.createElement("div");
+            div.style.cssText = "display: flex; justify-content: space-between; align-items: center; padding: 15px; background: rgba(100,116,139,0.05); border-radius: 12px; border: 1px solid rgba(100,116,139,0.1);";
+            div.className = "history-item";
+
+            div.innerHTML = `
+                <div class="item-info" style="cursor: pointer; flex-grow: 1;">
+                    <strong style="color: var(--aurora-2)">${item.skill}</strong><br>
+                    <small style="opacity: 0.7">${item.duration} • ${item.timestamp}</small>
+                </div>
+                <button class="delete-btn" style="background: transparent; border: none; color: #ff4d4d; font-size: 1.2rem; cursor: pointer;">🗑</button>
+            `;
+
+            div.querySelector('.item-info').onclick = () => {
+                header.style.display = "none";
+                render({ curriculum: item.curriculum }, item.skill);
+                historyPopup.style.display = "none";
+            };
+
+            div.querySelector('.delete-btn').onclick = async (e) => {
+                e.stopPropagation();
+                if (confirm(`Delete '${item.skill}' from history?`)) {
+                    await fetch(`/delete-history/${item.id}`, { method: "POST" });
+                    loadHistory();
                 }
-            } catch (err) {
-                console.error("Failed to clear history:", err);
-                alert("Failed to communicate with the server. Is the Python backend running?");
-            }
-        }
-    };
-}
+            };
 
-/* =========================
-   SEARCH HISTORY
-========================= */
-if(historySearch) {
-    historySearch.oninput=(e)=>{
-        const val=e.target.value.toLowerCase();
-        document.querySelectorAll(".history-item").forEach(item=>{
-            item.style.display=item.innerText.toLowerCase().includes(val)?"flex":"none";
+            historyList.appendChild(div);
         });
-    };
-}
+    }
 
-/* =========================
-   SORT BUTTONS
-========================= */
-if(document.getElementById("sortNewest")) {
-    document.getElementById("sortNewest").onclick=()=>{
-        sortMode="newest";
-        renderHistory();
-    };
-}
-
-if(document.getElementById("sortOldest")) {
-    document.getElementById("sortOldest").onclick=()=>{
-        sortMode="oldest";
-        renderHistory();
-    };
-}
-
-/* =========================
-   EXPORT HISTORY
-========================= */
-if(document.getElementById("exportHistory")) {
-    document.getElementById("exportHistory").onclick=()=>{
-        const blob=new Blob([JSON.stringify(historyData,null,2)],{type:"application/json"});
-        const a=document.createElement("a");
-        a.href=URL.createObjectURL(blob);
-        a.download="history.json";
-        a.click();
-    };
-}
-
-/* =========================
-   FORM SUBMIT
-========================= */
-if(form) {
-    form.addEventListener("submit",async e=>{
-        e.preventDefault();
-        const submitBtn = form.querySelector('button[type="submit"]');
-
-        let skill=document.getElementById("stream").value.trim();
-        skill = checkSpelling(skill);
-        document.getElementById("stream").value = skill;
-        const duration=document.getElementById("duration").value;
-        
-        // Handle level defensively in case it's missing from DOM
-        const levelSelect=document.getElementById("level");
-        const level = levelSelect ? levelSelect.value : "Beginner";
-
-        if(!skill) return;
-
-        submitBtn.disabled = true;
-        loader.style.display="block";
-        resultBox.innerHTML="";
-
-        try{
-            const resp=await fetch("/generate",{
-                method:"POST",
-                headers:{"Content-Type":"application/json"},
-                body:JSON.stringify({skill,duration,level})
-            });
-
-            const data = await resp.json();
-
-            loader.style.display="none";
-            header.style.display="none";
-            submitBtn.disabled = false;
-
-            if(!resp.ok){
-                resultBox.innerHTML="<p style='color:#ff4d4d; text-align:center;'>Error: " + (data.error || "Server error") + "</p>";
-                return;
+    if (document.getElementById("clearHistory")) {
+        document.getElementById("clearHistory").onclick = async () => {
+            if (!historyData.length) return;
+            if (confirm("Clear all your saved curriculums?")) {
+                await fetch("/clear-history", { method: "POST" });
+                loadHistory();
             }
-
-            render(data,skill);
-
-        }catch{
-            loader.style.display="none";
-            submitBtn.disabled = false;
-            resultBox.innerHTML="<p style='color:#ff4d4d; text-align:center;'>Cannot connect to server. Is app.py running?</p>";
-        }
-    });
-}
-
-/* =========================
-   RENDER CURRICULUM
-========================= */
-function render(data,skill){
-
-    if(!data || !data.curriculum){
-        resultBox.innerHTML="<p style='text-align:center;'>Error generating curriculum</p>";
-        return;
+        };
     }
 
-    let curr = data.curriculum;
-    if (typeof curr === 'string') {
-        try { curr = JSON.parse(curr); } catch(e) {}
-    }
-    if (curr && curr.curriculum) curr = curr.curriculum; // Handle double-wrapping
+    // PDF/Render logic from original
+    function render(data, skill) {
+        if (!data || !data.curriculum) { resultBox.innerHTML = "<p>Error displaying data.</p>"; return; }
 
-    // Wrap the curriculum in a specific container for the web display
-    let html = `
-        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid #667eea; padding-bottom: 10px; margin-bottom: 20px;">
+        let curr = data.curriculum;
+        if (typeof curr === 'string') { try { curr = JSON.parse(curr); } catch (e) {} }
+        if (curr && curr.curriculum) curr = curr.curriculum; 
+
+        let html = `<div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid #667eea; padding-bottom: 10px; margin-bottom: 20px;">
             <h2 style="margin:0;">${skill} Path</h2>
             <button id="pdfBtn" style="padding:8px 15px; border-radius:8px; cursor:pointer; background: linear-gradient(to right, #667eea, #764ba2); color: white; border: none; font-weight: bold; font-size: 0.9rem;">
                 📄 Download PDF
-            </button>
-        </div>
-        <div id="pdfContent">
-    `;
+            </button></div><div id="pdfContent">`;
 
-    curr.forEach(phase=>{
-        let phaseTitle = phase.phase_title || phase.title || phase.name || "Learning Phase";
-        html+=`<div class="phase-title" style="margin-top: 20px; font-weight: bold; padding: 10px; background: rgba(102, 126, 234, 0.1); border-left: 4px solid #667eea; border-radius: 4px;">${phaseTitle}</div>`;
-        
-        // Render Phase Objective if it exists
-        if (phase.phase_objective) {
-            html += `<div style="font-style: italic; color: var(--text); opacity: 0.85; margin-bottom: 15px; padding-left: 10px; font-size: 0.95rem;">
-                        🎯 <strong>Objective:</strong> ${phase.phase_objective}
-                     </div>`;
-        }
+        curr.forEach(phase => {
+            let phaseTitle = phase.phase_title || phase.title || phase.name || "Phase";
+            html += `<div style="margin-top: 20px; font-weight: bold; padding: 10px; background: rgba(102, 126, 234, 0.1); border-left: 4px solid #667eea; border-radius: 4px;">${phaseTitle}</div>`;
+            if (phase.phase_objective) html += `<div style="font-style: italic; opacity: 0.85; margin-bottom: 15px; padding-left: 10px; font-size: 0.95rem;">🎯 <strong>Objective:</strong> ${phase.phase_objective}</div>`;
 
-        let courses = phase.courses || phase.modules || phase.topics;
-        if (Array.isArray(courses)) {
-            courses.forEach(c=>{
-                let courseTitle = c.course_title || c.title || c.name || "Course Topic";
-                html+=`<div style="margin-left: 10px;">`;
-                html+=`<h4 style="margin-bottom: 5px; margin-top: 15px; color: var(--text);">${courseTitle}</h4>`;
-                
-                // Render Practical Project if it exists
-                if (c.practical_project) {
-                    html += `<div style="background: rgba(102, 126, 234, 0.1); border-left: 3px solid #764ba2; padding: 8px 10px; margin: 5px 0 10px 0; border-radius: 4px; font-size: 0.9rem; color: var(--text);">
-                                🛠️ <strong>Project:</strong> ${c.practical_project}
-                             </div>`;
-                }
-
-                html+=`<ul style="margin-top: 0; color: var(--text);">`;
-                
-                if (Array.isArray(c.topics)) {
-                    c.topics.forEach(t=> html+=`<li style="margin-bottom: 4px;">${t}</li>`);
-                } else if (typeof c.topics === "string") {
-                    html+=`<li style="margin-bottom: 4px;">${c.topics}</li>`;
-                }
-                html+=`</ul></div>`;
-            });
-        }
-    });
-
-    html += `</div>`; // Close pdfContent wrapper
-    resultBox.innerHTML=html;
-
-    /* =========================
-       DOWNLOAD PDF (IMPROVED)
-    ========================= */
-    const pdfBtn = document.getElementById("pdfBtn");
-    if(pdfBtn) {
-        pdfBtn.onclick = (e) => {
-            e.preventDefault();
-            
-            if (typeof html2pdf === 'undefined') {
-                alert("PDF generation library is not loaded. Ensure you have the html2pdf.js CDN in your index.html!");
-                return;
-            }
-
-            const originalText = pdfBtn.textContent;
-            pdfBtn.textContent = "⌛ Generating...";
-            pdfBtn.disabled = true;
-
-            // 1. Build a "Virtual Container" specifically formatted for printing.
-            const printContainer = document.createElement("div");
-            let printHtml = `
-                <div style="font-family: Arial, sans-serif; color: #333; padding: 20px; max-width: 800px; margin: 0 auto;">
-                    <h1 style="text-align: center; color: #4a5568; margin-bottom: 30px; font-size: 28px; border-bottom: 2px solid #cbd5e0; padding-bottom: 10px;">
-                        ${skill} Learning Path
-                    </h1>
-            `;
-
-            curr.forEach(phase => {
-                let pTitle = phase.phase_title || phase.title || phase.name || "Learning Phase";
-                // page-break-inside: avoid ensures phases aren't chopped in half
-                printHtml += `
-                    <div style="page-break-inside: avoid; margin-bottom: 25px;">
-                        <h2 style="background-color: #edf2f7; color: #2d3748; padding: 12px; border-left: 5px solid #667eea; border-radius: 4px; font-size: 20px; margin-top: 0;">
-                            ${pTitle}
-                        </h2>
-                `;
-                
-                // Render Phase Objective for PDF
-                if (phase.phase_objective) {
-                    printHtml += `<p style="font-style: italic; color: #4a5568; margin-top: 5px; margin-bottom: 15px; font-size: 14px; padding-left: 15px;">
-                                    <strong>Objective:</strong> ${phase.phase_objective}
-                                  </p>`;
-                }
-
-                printHtml += `<div style="padding-left: 15px;">`;
-                
-                let coursesList = phase.courses || phase.modules || phase.topics || [];
-                if (Array.isArray(coursesList)) {
-                    coursesList.forEach(c => {
-                        let cTitle = c.course_title || c.title || c.name || "Course Topic";
-                        printHtml += `
-                            <div style="page-break-inside: avoid; margin-bottom: 15px;">
-                                <h3 style="color: #2b6cb0; font-size: 16px; margin-bottom: 8px;">
-                                    ${cTitle}
-                                </h3>
-                        `;
-                        
-                        // Render Practical Project for PDF
-                        if (c.practical_project) {
-                            printHtml += `
-                                <div style="background-color: #f7fafc; border-left: 3px solid #805ad5; padding: 8px; margin-bottom: 10px; font-size: 14px; color: #2d3748; border-radius: 2px;">
-                                    <strong>🛠️ Project:</strong> ${c.practical_project}
-                                </div>
-                            `;
-                        }
-
-                        printHtml += `<ul style="margin: 0; padding-left: 20px; color: #4a5568; font-size: 14px; line-height: 1.6;">`;
-                        
-                        let topicsList = Array.isArray(c.topics) ? c.topics : typeof c.topics === "string" ? [c.topics] : ["General Concepts"];
-                        topicsList.forEach(t => {
-                            printHtml += `<li style="margin-bottom: 4px;">${t}</li>`;
-                        });
-                        
-                        printHtml += `</ul></div>`;
-                    });
-                }
-                printHtml += `</div></div>`;
-            });
-            printHtml += `</div>`;
-            printContainer.innerHTML = printHtml;
-
-            // 2. Configure robust PDF settings
-            const opt = {
-                margin:       [0.5, 0.5, 0.5, 0.5],
-                filename:     `${skill.replace(/\s+/g, '_')}_Curriculum.pdf`,
-                image:        { type: 'jpeg', quality: 1 },
-                html2canvas:  { 
-                    scale: 2,               // High resolution
-                    useCORS: true, 
-                    letterRendering: true   // Fixes text overlap/mangling issues
-                },
-                jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' },
-                pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] } // Strictly enforces page breaks
-            };
-
-            setTimeout(() => {
-                html2pdf().set(opt).from(printContainer).save().then(() => {
-                    pdfBtn.textContent = "✅ Downloaded";
-                    setTimeout(() => {
-                        pdfBtn.textContent = originalText;
-                        pdfBtn.disabled = false;
-                    }, 3000);
-                }).catch(err => {
-                    console.error("PDF generation failed:", err);
-                    pdfBtn.textContent = "❌ Error";
-                    setTimeout(() => {
-                        pdfBtn.textContent = originalText;
-                        pdfBtn.disabled = false;
-                    }, 3000);
+            let courses = phase.courses || phase.modules || phase.topics;
+            if (Array.isArray(courses)) {
+                courses.forEach(c => {
+                    let cTitle = c.course_title || c.title || c.name || "Topic";
+                    html += `<div style="margin-left: 10px;"><h4 style="margin-bottom: 5px; margin-top: 15px;">${cTitle}</h4>`;
+                    if (c.practical_project) html += `<div style="background: rgba(102, 126, 234, 0.1); border-left: 3px solid #764ba2; padding: 8px 10px; margin: 5px 0 10px 0; border-radius: 4px; font-size: 0.9rem;">🛠️ <strong>Project:</strong> ${c.practical_project}</div>`;
+                    html += `<ul style="margin-top: 0;">`;
+                    let tops = Array.isArray(c.topics) ? c.topics : [c.topics || "General"];
+                    tops.forEach(t => html += `<li style="margin-bottom: 4px;">${t}</li>`);
+                    html += `</ul></div>`;
                 });
-            }, 100);
+            }
+        });
+
+        html += `</div>`;
+        resultBox.innerHTML = html;
+
+        // Simplified PDF binder hook
+        document.getElementById("pdfBtn").onclick = (e) => {
+            e.preventDefault();
+            const btn = document.getElementById("pdfBtn");
+            const element = document.getElementById("pdfContent");
+            const opt = {
+                margin: 0.5, filename: `${skill.replace(/\s+/g, '_')}_Curriculum.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+            btn.textContent = "⏳ Generating..."; btn.disabled = true;
+            html2pdf().set(opt).from(element).save().then(()=> {
+                btn.textContent = "Downloaded"; setTimeout(()=>{btn.textContent="📄 Download PDF"; btn.disabled=false}, 2000);
+            });
         };
     }
-}
-
-/* =========================
-   SERVICE WORKER
-========================= */
-if('serviceWorker' in navigator){
-    navigator.serviceWorker.register('/sw.js').catch(err => {
-        // Suppress warning if sw.js simply hasn't been created yet
-    });
-}
-
 });
