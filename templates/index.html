@@ -1,16 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>Curriculum Generator</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <!-- Added html2pdf for Download functionality -->
+
+    <!-- PDF Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <!-- Google Identity Services (For Sign-In) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+
     <style>
-        /* =========================================
-           🔥 NEW "AURORA TECH" THEME OVERRIDES 🔥 
-           ========================================= */
+        /* Existing Theme Definitions */
         :root {
             --aurora-1: #00c6ff;
             --aurora-2: #0072ff;
@@ -25,12 +29,12 @@
             --input-text: #f8fafc;
         }
 
-        /* Clean Backgrounds */
-        html, body {
+        html,
+        body {
             height: 100%;
             margin: 0;
-            overflow: hidden; 
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+            font-family: system-ui, -apple-system, sans-serif;
             background: #f8fafc;
         }
 
@@ -38,7 +42,6 @@
             background: #222224;
         }
 
-        /* The Main App Window */
         .main-container {
             display: flex;
             justify-content: center;
@@ -61,7 +64,6 @@
             border-radius: 36px !important;
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.05) !important;
             border: none !important;
-            backdrop-filter: none;
         }
 
         body.dark .form-container {
@@ -70,7 +72,6 @@
             border: 1px solid rgba(255, 255, 255, 0.05) !important;
         }
 
-        /* Typography & Header */
         .header-area {
             flex-shrink: 0;
             margin-bottom: 25px;
@@ -99,7 +100,7 @@
             color: #94a3b8;
         }
 
-        /* 🔥 NEW DYNAMIC ATOM LOGO 🔥 */
+        /* Animation & Form Setup */
         .logo-container {
             display: flex;
             justify-content: center;
@@ -126,14 +127,46 @@
             transform-origin: 50px 50px;
         }
 
-        .ring-1 { animation: spin1 8s linear infinite; }
-        .ring-2 { animation: spin2 10s linear infinite; }
+        .ring-1 {
+            animation: spin1 8s linear infinite;
+        }
 
-        @keyframes spin1 { 0% { transform: rotateX(60deg) rotateZ(0deg); } 100% { transform: rotateX(60deg) rotateZ(360deg); } }
-        @keyframes spin2 { 0% { transform: rotateY(60deg) rotateX(45deg) rotateZ(0deg); } 100% { transform: rotateY(60deg) rotateX(45deg) rotateZ(360deg); } }
-        @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-8px); } }
+        .ring-2 {
+            animation: spin2 10s linear infinite;
+        }
 
-        /* Scrollable Content Area */
+        @keyframes spin1 {
+            0% {
+                transform: rotateX(60deg) rotateZ(0deg);
+            }
+
+            100% {
+                transform: rotateX(60deg) rotateZ(360deg);
+            }
+        }
+
+        @keyframes spin2 {
+            0% {
+                transform: rotateY(60deg) rotateX(45deg) rotateZ(0deg);
+            }
+
+            100% {
+                transform: rotateY(60deg) rotateX(45deg) rotateZ(360deg);
+            }
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translateY(0px);
+            }
+
+            50% {
+                transform: translateY(-8px);
+            }
+        }
+
         .content-area {
             flex-grow: 1;
             overflow-y: auto;
@@ -143,10 +176,15 @@
             flex-direction: column;
         }
 
-        .content-area::-webkit-scrollbar { width: 6px; }
-        .content-area::-webkit-scrollbar-thumb { background: var(--aurora-2); border-radius: 10px; }
+        .content-area::-webkit-scrollbar {
+            width: 6px;
+        }
 
-        /* Inputs & Form - Pill Styled */
+        .content-area::-webkit-scrollbar-thumb {
+            background: var(--aurora-2);
+            border-radius: 10px;
+        }
+
         #curriculumForm {
             flex-shrink: 0;
             display: flex;
@@ -155,51 +193,60 @@
             width: 100%;
         }
 
+        #curriculumForm input,
+        #curriculumForm select,
+        #curriculumForm button {
+            text-align: center;
+            text-align-last: center;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
         .select-row {
             display: flex;
             gap: 15px;
             width: 100%;
         }
 
-        #stream, .select-row select {
-            width: 100%;
+        #stream,
+        .select-row select {
             background: var(--input-bg) !important;
             color: var(--input-text);
             border: 2px solid transparent;
             padding: 16px 20px;
-            border-radius: 50px; /* Ultra-rounded Pill shape */
+            border-radius: 50px;
             font-size: 1.05rem;
             font-weight: 500;
             transition: all 0.3s ease;
-            box-sizing: border-box;
             outline: none;
-            text-align: center;
-            text-align-last: center;
-            appearance: none; /* removes native styling on select */
+            appearance: none;
         }
 
         #stream {
+            padding: 12px 15px;
+            border-radius: 15px;
+            font-size: 1rem;
+            border: 2px solid #ccc;
             margin-bottom: 15px;
-            text-align: center;
         }
 
-        #stream:focus, .select-row select:focus {
+        #stream:focus,
+        .select-row select:focus {
             border-color: var(--aurora-1);
             background: #ffffff !important;
             box-shadow: 0 0 0 4px rgba(0, 198, 255, 0.1);
         }
 
-        body.dark #stream:focus, body.dark .select-row select:focus {
+        body.dark #stream:focus,
+        body.dark .select-row select:focus {
             background: #0f172a !important;
             box-shadow: 0 0 0 4px rgba(0, 242, 254, 0.15);
         }
 
-        /* Generate Button */
         #curriculumForm button[type="submit"] {
-            width: 100%;
             padding: 16px 20px;
             margin-top: 25px;
-            border-radius: 50px; /* Ultra-rounded Pill */
+            border-radius: 50px;
             font-size: 1.15rem;
             border: none;
             background: linear-gradient(135deg, var(--aurora-1) 0%, var(--aurora-2) 100%);
@@ -215,7 +262,6 @@
             box-shadow: 0 12px 25px rgba(0, 114, 255, 0.4);
         }
 
-        /* 🔥 NEW AI SPINNER LOADER 🔥 */
         .ai-loader {
             display: inline-flex;
             flex-direction: column;
@@ -225,47 +271,24 @@
             margin-top: 30px;
         }
 
-        .ai-spinner {
-            width: 50px;
-            height: 50px;
-            animation: rotate 2s linear infinite;
-        }
-
-        .ai-spinner circle {
-            stroke: url(#aiGrad);
-            stroke-dasharray: 1, 150;
-            stroke-dashoffset: 0;
-            animation: dash 1.5s ease-in-out infinite;
-            stroke-linecap: round;
-        }
-
-        .ai-loader-text {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--aurora-2);
-            animation: pulseText 1.5s infinite ease-in-out;
-        }
-        
-        body.dark .ai-loader-text { color: var(--aurora-1); }
-
-        @keyframes rotate { 100% { transform: rotate(360deg); } }
-        @keyframes dash {
-            0% { stroke-dasharray: 1, 150; stroke-dashoffset: 0; }
-            50% { stroke-dasharray: 90, 150; stroke-dashoffset: -35; }
-            100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; }
-        }
-        @keyframes pulseText { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-
-        /* Top Menus / Buttons */
-        .menu-container, .new-chat-btn {
+        /* Menus */
+        .menu-container,
+        .new-chat-btn {
             position: fixed;
             top: 25px;
             z-index: 1000;
         }
-        .menu-container { left: 25px; }
-        .new-chat-btn { right: 25px; }
 
-        .menu-btn, .new-chat-btn {
+        .menu-container {
+            left: 25px;
+        }
+
+        .new-chat-btn {
+            right: 25px;
+        }
+
+        .menu-btn,
+        .new-chat-btn {
             background: white;
             padding: 10px 20px;
             border-radius: 50px;
@@ -281,29 +304,30 @@
             align-items: center;
         }
 
-        .menu-btn:hover, .new-chat-btn:hover {
+        .menu-btn:hover,
+        .new-chat-btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
         }
 
-        body.dark .menu-btn, body.dark .new-chat-btn {
+        body.dark .menu-btn,
+        body.dark .new-chat-btn {
             background: #1e293b;
             color: #f8fafc;
             border-color: #334155;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
         }
 
-        /* Popup Dropdown */
         .dropdown-content {
-            display: none; 
-            flex-direction: column; 
+            display: none;
+            flex-direction: column;
             position: absolute;
             top: 100%;
             left: 0;
             margin-top: 10px;
             background: white;
             border-radius: 20px;
-            min-width: 150px; 
+            min-width: 150px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             border: 1px solid #e2e8f0;
             overflow: hidden;
@@ -316,7 +340,9 @@
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
         }
 
-        .dropdown-content.show { display: flex; }
+        .dropdown-content.show {
+            display: flex;
+        }
 
         .dropdown-content a {
             color: #475569;
@@ -327,216 +353,216 @@
             transition: background 0.2s;
         }
 
-        body.dark .dropdown-content a { color: #cbd5e1; }
-        .dropdown-content a:hover { background: #f1f5f9; color: var(--aurora-2); }
-        body.dark .dropdown-content a:hover { background: #334155; color: var(--aurora-1); }
+        body.dark .dropdown-content a {
+            color: #cbd5e1;
+        }
 
+        .dropdown-content a:hover {
+            background: #f1f5f9;
+            color: var(--aurora-2);
+        }
+
+        body.dark .dropdown-content a:hover {
+            background: #334155;
+            color: var(--aurora-1);
+        }
+
+        /* Modals & Popups */
+        .history-popup {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .history-glass {
+            background: #fff;
+            border-radius: 20px;
+            padding: 30px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2);
+        }
+
+        body.dark .history-glass {
+            background: #1e293b;
+            border: 1px solid #334155;
+            color: #fff;
+        }
     </style>
 </head>
 
 <body>
-<!-- Top Left Menu -->
-<div class="menu-container">
-    <div class="menu-btn" onclick="toggleMenu()">☰ Menu</div>
-    <div class="dropdown-content" id="myDropdown">
-        <a href="#" onclick="document.getElementById('profilePopup').style.display='flex'; toggleMenu(); return false;">Profile</a>
-        <a href="#">History</a>
-        <a id="downloadBtn" style="cursor: pointer; display: none;">📥 Download PDF</a>
-        <a href="#">Settings</a>
-        <a id="themeToggle" style="cursor: pointer;">🌙 Dark Mode</a>
-        <a href="#" onclick="document.getElementById('aboutPopup').style.display='flex'; toggleMenu(); return false;">About</a>
-    </div>
-</div>
-
-<!-- Top Right Button -->
-<a href="/" class="new-chat-btn">＋ New Chat</a>
-
-<div class="main-container">
-    <div class="form-container">
-        
-        <!-- Header Section with NEW ATOM LOGO -->
-        <div class="header-area">
-            <div class="logo-container">
-                <svg class="ai-atom" viewBox="0 0 100 100">
-                    <defs>
-                        <linearGradient id="aiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" class="grad-start" stop-color="var(--aurora-1)" />
-                            <stop offset="100%" class="grad-end" stop-color="var(--aurora-2)" />
-                        </linearGradient>
-                    </defs>
-                    <ellipse class="atom-ring ring-1" cx="50" cy="50" rx="40" ry="15" />
-                    <ellipse class="atom-ring ring-2" cx="50" cy="50" rx="40" ry="15" />
-                    <circle cx="50" cy="50" r="10" fill="url(#aiGrad)" />
-                </svg>
-            </div>
-            <h1>CourseCraft</h1>
-            <p>Generate highly-structured AI learning paths</p>
+    <!-- Top Menus -->
+    <div class="menu-container">
+        <div class="menu-btn" onclick="toggleMenu()">☰ Menu</div>
+        <div class="dropdown-content" id="myDropdown">
+            <a href="#"
+                onclick="document.getElementById('profilePopup').style.display='flex'; toggleMenu(); return false;">Profile
+                & Quota</a>
+            <a href="#" id="openHistoryBtn">My History</a>
+            <a id="downloadBtn" style="cursor: pointer; display: none;">📥 Download PDF</a>
+            <a id="themeToggle" style="cursor: pointer;">🌙 Dark Mode</a>
+            <a href="#"
+                onclick="document.getElementById('aboutPopup').style.display='flex'; toggleMenu(); return false;">About</a>
         </div>
+    </div>
+    <a href="/" class="new-chat-btn">＋ New Chat</a>
 
-        <!-- Middle Scrollable Result Area -->
-        <div class="content-area">
-            <div id="loader" style="display:none; text-align: center;">
-                <div class="ai-loader" style="margin-top: 40px; margin-bottom: 20px;">
-                    <svg class="ai-atom" viewBox="0 0 100 100" style="width: 75px; height: 75px;">
+    <!-- Main Container -->
+    <div class="main-container">
+        <div class="form-container">
+            <div class="header-area">
+                <div class="logo-container">
+                    <svg class="ai-atom" viewBox="0 0 100 100">
+                        <defs>
+                            <linearGradient id="aiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" class="grad-start" stop-color="var(--aurora-1)" />
+                                <stop offset="100%" class="grad-end" stop-color="var(--aurora-2)" />
+                            </linearGradient>
+                        </defs>
                         <ellipse class="atom-ring ring-1" cx="50" cy="50" rx="40" ry="15" />
                         <ellipse class="atom-ring ring-2" cx="50" cy="50" rx="40" ry="15" />
                         <circle cx="50" cy="50" r="10" fill="url(#aiGrad)" />
                     </svg>
                 </div>
+                <h1>CourseCraft</h1>
+                <p>Generate highly-structured AI learning paths</p>
             </div>
-            <div id="result"></div>
+
+            <div class="content-area">
+                <div id="loader" style="display:none; text-align: center;">
+                    <div class="ai-loader" style="margin-top: 40px; margin-bottom: 20px;">
+                        <svg class="ai-atom" viewBox="0 0 100 100" style="width: 75px; height: 75px;">
+                            <ellipse class="atom-ring ring-1" cx="50" cy="50" rx="40" ry="15" />
+                            <ellipse class="atom-ring ring-2" cx="50" cy="50" rx="40" ry="15" />
+                            <circle cx="50" cy="50" r="10" fill="url(#aiGrad)" />
+                        </svg>
+                    </div>
+                </div>
+                <div id="result"></div>
+            </div>
+
+            <form id="curriculumForm">
+                <input type="text" id="stream" placeholder="What do you want to learn today?" required>
+                <div class="select-row">
+                    <select id="duration" required>
+                        <option value="" disabled selected>Duration</option>
+                        <option value="3 Months">3 Months (Intensive)</option>
+                        <option value="6 Months">6 Months (Standard)</option>
+                        <option value="1 Year">1 Year (Mastery)</option>
+                    </select>
+                    <select id="level" required>
+                        <option value="" disabled selected>Experience</option>
+                        <option value="Beginner">Beginner</option>
+                        <option value="Advanced">Advanced</option>
+                        <option value="Pro">Pro</option>
+                    </select>
+                </div>
+                <button type="submit">Generate Path</button>
+            </form>
         </div>
+    </div>
 
-        <!-- Bottom Input Form -->
-        <form id="curriculumForm">
-            <input type="text" id="stream" placeholder="What do you want to learn today?" required>
+    <!-- Login/Limit Modal -->
+    <div id="loginModal" class="history-popup">
+        <div class="history-glass"
+            style="text-align: center; max-width: 400px; padding: 40px; border-radius: 36px; position: relative;">
+            <button onclick="document.getElementById('loginModal').style.display='none'"
+                style="position: absolute; top: 25px; right: 25px; background: transparent; border: none; color: #64748b; font-size: 1.5rem; cursor: pointer;">✕</button>
+            <h2 style="margin-bottom: 10px; color: var(--aurora-2);">Limit Reached</h2>
+            <p style="margin-bottom: 30px; color: #64748b;">You've used up your free searches! Sign in to get unlimited
+                searches and save your history securely.</p>
 
-            <div class="select-row">
-                <select id="duration" required>
-                    <option value="" disabled selected>Duration</option>
-                    <option value="3 Months">3 Months (Intensive)</option>
-                    <option value="6 Months">6 Months (Standard)</option>
-                    <option value="1 Year">1 Year (Mastery)</option>
-                </select>
+            <!-- Real Google Auth Button Target -->
+            <div id="googleSignInModalTarget" style="display:flex; justify-content:center; margin-bottom: 15px;"></div>
 
-                <select id="level" required>
-                    <option value="" disabled selected>Experience</option>
-                    <option value="Beginner">Beginner</option>
-                    <option value="Advanced">Advanced</option>
-                    <option value="Pro">Pro</option>
-                </select>
+            <!-- Dev Bypass Button (If users don't have GCP set up) -->
+            <button onclick="devBypassLogin()"
+                style="padding: 10px; font-size: 0.9rem; border-radius: 10px; border: 1px dashed #64748b; background: transparent; color: #64748b; cursor: pointer;">Testing
+                without credentials? Click for Dev Bypass</button>
+        </div>
+    </div>
+
+    <!-- Dynamic Profile Popup -->
+    <div id="profilePopup" class="history-popup">
+        <div class="history-glass"
+            style="text-align: center; max-width: 400px; padding: 40px; border-radius: 36px; position: relative;">
+            <button onclick="document.getElementById('profilePopup').style.display='none'"
+                style="position: absolute; top: 25px; right: 25px; background: transparent; border: none; color: #64748b; font-size: 1.5rem; cursor: pointer;">✕</button>
+            <div
+                style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, var(--aurora-1) 0%, var(--aurora-2) 100%); margin: 0 auto 15px; display: flex; align-items: center; justify-content: center;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" style="width: 40px; height: 40px;">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
             </div>
 
-            <button type="submit">Generate Path</button>
-        </form>
-        
+            <!-- Inject Dynamic Profile Content via JS -->
+            <div id="profileContent"></div>
+
+            <div id="googleSignInProfileTarget" style="display:flex; justify-content:center; margin-top: 15px;"></div>
+        </div>
     </div>
-</div>
 
-<script>
-    function toggleMenu() {
-        document.getElementById("myDropdown").classList.toggle("show");
-    }
+    <!-- Dynamic History Popup -->
+    <div id="historyPopup" class="history-popup">
+        <div class="history-glass" style="border-radius: 36px;">
+            <div class="history-header"
+                style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
+                <h3 style="color: var(--aurora-1); margin: 0; font-size: 1.5rem;">My History</h3>
+                <button id="closeHistory"
+                    style="background:transparent; border:none; font-size: 1.5rem; cursor:pointer; color:#64748b;">✕</button>
+            </div>
 
-    window.onclick = function(event) {
-        if (!event.target.matches('.menu-btn')) {
-            var dropdowns = document.getElementsByClassName("dropdown-content");
-            for (var i = 0; i < dropdowns.length; i++) {
-                var openDropdown = dropdowns[i];
-                if (openDropdown.classList.contains('show')) {
-                    openDropdown.classList.remove('show');
-                }
+            <div id="historyAuthWarning"
+                style="display:none; text-align:center; padding: 20px; background: rgba(0,0,0,0.05); border-radius: 10px; margin-bottom: 20px;">
+                <p>You must be signed in to save and view history.</p>
+                <button
+                    onclick="document.getElementById('historyPopup').style.display='none'; document.getElementById('loginModal').style.display='flex';"
+                    style="padding: 10px 20px; border-radius: 20px; background: var(--aurora-2); color: white; border: none; cursor:pointer;">Sign
+                    In</button>
+            </div>
+
+            <div id="historyContentBlock">
+                <input type="text" id="historySearch" placeholder="Search past curriculums..."
+                    style="width: 100%; border-radius: 50px; padding: 14px 20px; border: 2px solid rgba(100,116,139,0.2); background: transparent; margin-bottom: 15px; box-sizing: border-box; outline:none; color: inherit;">
+                <div style="display: flex; gap: 10px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 5px;">
+                    <button id="sortNewest"
+                        style="border-radius: 50px; padding: 8px 15px; border:1px solid #cbd5e1; background:transparent; cursor:pointer; color:inherit;">Newest</button>
+                    <button id="sortOldest"
+                        style="border-radius: 50px; padding: 8px 15px; border:1px solid #cbd5e1; background:transparent; cursor:pointer; color:inherit;">Oldest</button>
+                    <button id="clearHistory"
+                        style="border-radius: 50px; padding: 8px 15px; border:1px solid #ef4444; background:transparent; cursor:pointer; color:#ef4444; margin-left: auto;">Clear
+                        All</button>
+                </div>
+                <div id="historyList"
+                    style="display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/typo-js@1.2.4/typo.min.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        function toggleMenu() { document.getElementById("myDropdown").classList.toggle("show"); }
+        window.onclick = function (e) {
+            if (!e.target.matches('.menu-btn')) {
+                document.querySelectorAll(".dropdown-content").forEach(d => d.classList.remove('show'));
             }
         }
-    }
-</script>
-
-<script src="https://cdn.jsdelivr.net/npm/typo-js@1.2.4/typo.min.js"></script>
-
-<script src="{{ url_for('static', filename='script.js') }}"></script>
-
-<!-- 🔥 NEW Profile Popup 🔥 -->
-<div id="profilePopup" class="history-popup">
-  <div class="history-glass" style="text-align: center; max-width: 400px; padding: 40px; border-radius: 36px; position: relative;">
-    
-    <button onclick="document.getElementById('profilePopup').style.display='none'" style="position: absolute; top: 25px; right: 25px; background: transparent; border: none; color: #64748b; font-size: 1.5rem; cursor: pointer;">✕</button>
-    
-    <div style="width: 100px; height: 100px; border-radius: 50%; background: linear-gradient(135deg, var(--aurora-1) 0%, var(--aurora-2) 100%); margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 25px rgba(0, 114, 255, 0.4);">
-        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 50px; height: 50px;">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-            <circle cx="12" cy="7" r="4"></circle>
-        </svg>
-    </div>
-    
-    <h2 style="margin: 0 0 5px 0; font-size: 1.8rem; color: var(--input-text);">Guest Explorer</h2>
-    <p style="margin: 0 0 25px 0; color: #64748b;">Ready to master new skills</p>
-    
-    <div style="display: flex; justify-content: space-around; background: var(--input-bg); padding: 20px; border-radius: 20px; margin-bottom: 30px; border: 1px solid rgba(255,255,255,0.05);">
-        <div>
-            <h3 style="margin: 0; color: var(--aurora-2); font-size: 1.6rem;">0</h3>
-            <p style="margin: 0; font-size: 0.9rem; color: #64748b; font-weight: 600;">Paths Created</p>
-        </div>
-        <div style="width: 2px; background: rgba(100, 116, 139, 0.2);"></div>
-        <div>
-            <h3 style="margin: 0; color: var(--aurora-1); font-size: 1.6rem;">Novice</h3>
-            <p style="margin: 0; font-size: 0.9rem; color: #64748b; font-weight: 600;">Current Rank</p>
-        </div>
-    </div>
-
-    <button onclick="document.getElementById('profilePopup').style.display='none'" style="padding: 14px 25px; border-radius: 50px; cursor: pointer; background: transparent; color: var(--input-text); border: 2px solid var(--aurora-2); font-weight: 800; font-size: 1.05rem; width: 100%; transition: all 0.3s ease;">
-        Close Profile
-    </button>
-  </div>
-</div>
-
-<!-- 🔥 About / Welcome Popup 🔥 -->
-<div id="aboutPopup" class="history-popup">
-  <div class="history-glass" style="text-align: left; max-width: 520px; padding: 40px; border-radius: 36px; position: relative;">
-    
-    <button onclick="document.getElementById('aboutPopup').style.display='none'" style="position: absolute; top: 25px; right: 25px; background: transparent; border: none; color: #64748b; font-size: 1.5rem; cursor: pointer;">✕</button>
-
-    <div class="history-header" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px; margin-bottom: 25px;">
-      <div style="display: flex; align-items: center;">
-          <svg class="ai-atom small" viewBox="0 0 100 100">
-              <ellipse class="atom-ring ring-1" cx="50" cy="50" rx="40" ry="15" />
-              <ellipse class="atom-ring ring-2" cx="50" cy="50" rx="40" ry="15" />
-              <circle cx="50" cy="50" r="10" fill="url(#aiGrad)" />
-          </svg>
-          <h2 style="margin: 0; font-size: 2rem; background: linear-gradient(135deg, var(--aurora-1) 0%, var(--aurora-2) 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">CourseCraft AI</h2>
-      </div>
-    </div>
-
-    <div style="color: inherit; line-height: 1.6;">
-        <p style="font-size: 1.05rem; margin-bottom: 25px; opacity: 0.9;">
-            <strong>CourseCraft AI</strong> is your personal curriculum architect. It instantly generates structured, highly customized learning paths for any skill, taking the guesswork out of learning.
-        </p>
-
-        <h4 style="margin: 0 0 12px 0; font-size: 1.15rem; color: var(--aurora-1);">🛠️ How to use:</h4>
-        <ol style="margin-top: 0; margin-bottom: 25px; padding-left: 20px; opacity: 0.9;">
-            <li style="margin-bottom: 10px;"><strong>Enter a Skill:</strong> Type what you want to learn (e.g., "Python", "UI Design").</li>
-            <li style="margin-bottom: 10px;"><strong>Set Parameters:</strong> Choose your desired timeframe and experience level.</li>
-            <li style="margin-bottom: 10px;"><strong>Generate:</strong> Get a structured roadmap with real-world projects!</li>
-        </ol>
-
-        <h4 style="margin: 0 0 12px 0; font-size: 1.15rem; color: var(--aurora-1);">🚀 Why it is useful:</h4>
-        <p style="margin-top: 0; margin-bottom: 30px; opacity: 0.9;">
-            Stop getting lost in endless tutorials. A structured plan keeps you focused, motivated, and engaged, transforming you from a beginner into a pro smoothly and efficiently.
-        </p>
-        
-        <div style="text-align: center;">
-            <button onclick="document.getElementById('aboutPopup').style.display='none'" style="padding: 16px 25px; border-radius: 50px; cursor: pointer; background: linear-gradient(135deg, var(--aurora-1) 0%, var(--aurora-2) 100%); color: white; border: none; font-weight: 800; font-size: 1.1rem; width: 100%; transition: transform 0.2s ease; box-shadow: 0 8px 20px rgba(0, 114, 255, 0.3);">
-                👉 Start Learning
-            </button>
-        </div>
-    </div>
-  </div>
-</div>
-
-<!-- History Popup -->
-<div id="historyPopup" class="history-popup">
-  <div class="history-glass" style="border-radius: 36px;">
-    
-    <div class="history-header">
-      <h3 style="color: var(--aurora-1);">History</h3>
-      <button id="closeHistory">✕</button>
-    </div>
-
-    <input type="text" id="historySearch" placeholder="Search your past curriculums..." style="border-radius: 50px; padding: 14px 20px; border: 2px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
-
-    <div class="history-controls">
-      <button id="sortNewest" style="border-radius: 50px;">Newest</button>
-      <button id="sortOldest" style="border-radius: 50px;">Oldest</button>
-      <button id="exportHistory" style="border-radius: 50px;">Export</button>
-      <button id="clearHistory" style="border-radius: 50px;">Clear All</button>
-    </div>
-
-    <div id="historyList" class="history-list"></div>
-
-    <div id="undoBox" class="undo-box">
-        Deleted ✔ <button id="undoDelete">Undo</button>
-    </div>
-
-  </div>
-</div>
+    </script>
 </body>
+
 </html>
