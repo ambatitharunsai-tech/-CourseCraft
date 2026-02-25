@@ -1,22 +1,34 @@
-from flask import Flask, request, jsonify, send_file, render_template
-import requests
-import json
-import re
-import os
-import io
-import datetime
+from flask import Flask, request, jsonify, send_file, render_template, session
+import requests, json, re, os, io, datetime
 from flask_sqlalchemy import SQLAlchemy
 
-# Initialize Flask
+# Google Auth Imports
+try:
+    from google.oauth2 import id_token
+    from google.auth.transport import requests as google_requests
+    import google.auth.jwt
+    GOOGLE_AUTH_AVAILABLE = True
+except ImportError:
+    GOOGLE_AUTH_AVAILABLE = False
+
 app = Flask(__name__)
 
-# ---------------- DATABASE ----------------
+# ---------------- SECURITY & DATABASE ----------------
+app.secret_key = os.getenv("SECRET_KEY", "super_secret_development_key_123")
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///history.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    google_id = db.Column(db.String(100), unique=True, nullable=False)
+    email = db.Column(db.String(100), nullable=True)
+    name = db.Column(db.String(100), nullable=False)
+    searches_count = db.Column(db.Integer, default=0)
+
 class SearchHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     timestamp = db.Column(db.String(50), nullable=False)
     skill = db.Column(db.String(100), nullable=False)
     duration = db.Column(db.String(50), nullable=False)
@@ -27,201 +39,175 @@ with app.app_context():
 
 # ---------------- HELPERS ----------------
 
-def save_history(skill, duration, curriculum):
+def save_history(user_id, skill, duration, curriculum):
     record = SearchHistory(
+        user_id=user_id,
         timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         skill=skill,
         duration=duration,
         curriculum=json.dumps(curriculum)
     )
     db.session.add(record)
-    
-    # Auto-cleanup: Keep only the latest 50 searches
-    count = SearchHistory.query.count()
-    if count > 50:
-        oldest_records = SearchHistory.query.order_by(SearchHistory.id.asc()).limit(count - 50).all()
-        for old in oldest_records:
-            db.session.delete(old)
-            
     db.session.commit()
 
-
 def parse_curriculum(text):
-    """Extract JSON safely from AI response"""
     try:
-        # Clean out markdown code blocks that LLMs frequently output
         text = re.sub(r'```json\s*', '', text, flags=re.IGNORECASE)
         text = re.sub(r'```\s*', '', text)
-        
         match = re.search(r'\{.*\}', text, re.S)
-        if not match:
-            return None
-            
-        data = json.loads(match.group())
-        
-        # Standardize format
-        if "curriculum" in data:
-            return data
-        elif isinstance(data, list):
-            return {"curriculum": data}
-        return {"curriculum": [data]}
+        if not match: return None
+        return json.loads(match.group())
     except Exception as e:
-        print(f"Error parsing curriculum JSON: {e}")
+        print(f"Error parsing JSON: {e}")
         return None
 
-
 def generate_curriculum(prompt):
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY").strip()
     if not api_key:
-        return {"error": "Missing GROQ_API_KEY environment variable. Please set it in Render."}
+        return {"error": "Missing GROQ_API_KEY"}
 
     url = "https://api.groq.com/openai/v1/chat/completions"
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     data = {
         "model": "llama-3.3-70b-versatile",
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3,
-        "response_format": {"type": "json_object"} 
+        "temperature": 0.3
     }
 
     try:
-        response = requests.post(url, headers=headers, json=data, timeout=90)
+        response = requests.post(url, headers=headers, json=data, timeout=60)
         response.raise_for_status()
-        result = response.json()
-        return result["choices"][0]["message"]["content"]
-
+        return response.json()["choices"][0]["message"]["content"]
     except requests.exceptions.RequestException as e:
-        error_details = f"LLM request failed: {str(e)}"
-        if hasattr(e, 'response') and e.response is not None:
-            try:
-                error_details = e.response.json().get("error", {}).get("message", str(e))
-            except:
-                error_details = f"HTTP {e.response.status_code}: {e.response.reason}"
-                
-        return {"error": error_details}
+        return {"error": "LLM request failed or timed out"}
 
+# ---------------- AUTHENTICATION ROUTES ----------------
 
-# ---------------- JSON SCHEMA DEFINITION ----------------
-# We define this strictly outside the route to avoid python f-string curly-brace escaping issues
-STRICT_SCHEMA = """
-{
-  "type": "object",
-  "properties": {
-    "curriculum": {
-      "type": "array",
-      "description": "Chronological learning phases. Strictly progress from beginner to advanced.",
-      "items": {
-        "type": "object",
-        "properties": {
-          "phase_title": {
-            "type": "string",
-            "description": "Format: 'Phase X: [Dynamic Descriptive Title]'. Flawless spelling."
-          },
-          "phase_objective": {
-            "type": "string",
-            "description": "A dynamic, engaging 1-sentence summary of what the user will build or achieve."
-          },
-          "courses": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "course_title": {
-                  "type": "string",
-                  "description": "Professional, accurate real-world subject name."
-                },
-                "practical_project": {
-                  "type": "string",
-                  "description": "Specific hands-on mini-project idea to apply concepts."
-                },
-                "topics": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "description": "Concise, actionable sub-topic. 5-10 words maximum. Standard professional vocabulary."
-                  }
-                }
-              },
-              "required": ["course_title", "topics"]
-            }
-          }
-        },
-        "required": ["phase_title", "courses"]
-      }
-    }
-  },
-  "required": ["curriculum"]
-}
-"""
+@app.route("/api/user", methods=["GET"])
+def get_user():
+    """Returns current user status and quotas"""
+    user_id = session.get("user_id")
+    if user_id:
+        user = db.session.get(User, user_id)
+        if user:
+            return jsonify({
+                "logged_in": True,
+                "name": user.name,
+                "email": user.email,
+                "searches": user.searches_count
+            })
+    
+    # Guest user logic
+    guest_searches = session.get("guest_searches", 0)
+    return jsonify({
+        "logged_in": False,
+        "guest_left": max(0, 3 - guest_searches)
+    })
 
+@app.route("/auth/google", methods=["POST"])
+def auth_google():
+    """Validates Google JWT and creates/logs in the user"""
+    data = request.json
+    token = data.get("token")
+    is_dev_bypass = data.get("dev_bypass")
 
-# ---------------- ROUTES ----------------
+    # Developer bypass for testing without actual Google Credentials
+    if is_dev_bypass:
+        user = User.query.filter_by(google_id="dev-123").first()
+        if not user:
+            user = User(google_id="dev-123", email="test@example.com", name="Test Explorer")
+            db.session.add(user)
+            db.session.commit()
+        session['user_id'] = user.id
+        return jsonify({"success": True, "name": user.name})
+
+    if not GOOGLE_AUTH_AVAILABLE:
+        return jsonify({"error": "google-auth library not installed on server"}), 500
+
+    try:
+        # REPLACE 'YOUR_GOOGLE_CLIENT_ID' WITH YOUR ACTUAL CLIENT ID FROM GCP
+        CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "YOUR_GOOGLE_CLIENT_ID")
+        
+        if CLIENT_ID == "YOUR_GOOGLE_CLIENT_ID":
+            # Insecure fallback strictly for demonstration if Client ID isn't set
+            idinfo = google.auth.jwt.decode(token, verify=False)
+        else:
+            # Secure verification
+            idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), CLIENT_ID)
+
+        google_id = idinfo['sub']
+        user = User.query.filter_by(google_id=google_id).first()
+        
+        if not user:
+            user = User(google_id=google_id, email=idinfo.get('email'), name=idinfo.get('name'))
+            db.session.add(user)
+        
+        db.session.commit()
+        session['user_id'] = user.id
+        return jsonify({"success": True, "name": user.name})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route("/auth/logout", methods=["POST"])
+def logout():
+    session.pop("user_id", None)
+    return jsonify({"success": True})
+
+# ---------------- APP ROUTES ----------------
 
 @app.route("/")
 def home():
     return render_template("index.html")
 
-
 @app.route("/generate", methods=["POST"])
 def generate():
-    data = request.json
+    # 1. Check Limits & Authentication
+    user_id = session.get("user_id")
+    
+    if not user_id:
+        guest_searches = session.get("guest_searches", 0)
+        if guest_searches >= 3:
+            return jsonify({"error": "limit_reached", "message": "Free limit reached. Sign in to continue."}), 403
+        session["guest_searches"] = guest_searches + 1
+    else:
+        user = db.session.get(User, user_id)
+        user.searches_count += 1
+        db.session.commit()
 
+    # 2. Generation logic
+    data = request.json
     skill = data.get("skill", "").strip()
     duration = data.get("duration", "6 Months")
-    level = data.get("level", "Beginner")
 
     if not skill:
         return jsonify({"error": "Skill cannot be empty"}), 400
 
-    # DYNAMIC TIME AND LEVEL INSTRUCTIONS
-    phase_instructions = ""
-    if "3" in duration:
-        phase_instructions = "This is a fast-paced, Intensive 3-Month Bootcamp. Create exactly 1 to 2 phases max. Focus on rapid skill acquisition."
-    elif "1" in duration or "year" in duration.lower():
-        phase_instructions = "This is a Comprehensive 1-Year Masterclass. Create exactly 4 to 6 phases. Build from foundations to highly advanced mastery."
-    else:
-        phase_instructions = "This is a Standard 6-Month Track. Create exactly 2 to 3 phases. Balance theory with practical implementation."
-
-    prompt = f"""
-    Create a highly structured, dynamic learning curriculum for a {level}-level student learning '{skill}'.
-
-    CRITICAL INSTRUCTIONS:
-    - {phase_instructions}
-    - Tailor the difficulty strictly to a '{level}' learner.
-    - YOU MUST USE STRICT, FLAWLESS ENGLISH TERMINOLOGY. ABSOLUTELY NO GIBBERISH OR TYPOS (e.g., no made up words like 'inkilligance').
-    - Output ONLY perfectly valid JSON that strictly adheres to the provided JSON Schema below. 
-    - Do not include markdown formatting or any chat text outside the JSON.
-
-    REQUIRED JSON SCHEMA:
-    {STRICT_SCHEMA}
-    """
-
-    print(f"Sending dynamic prompt to AI for {skill} ({duration} | {level})...")
+    prompt = f"Create a structured learning curriculum for {skill}.\nRules:\n- Provide clear phases\n- Each phase includes courses with topics\n- Return ONLY valid JSON\nFormat:\n{{\"curriculum\":[{{\"phase_title\":\"Phase 1\",\"courses\":[{{\"course_title\":\"Course\",\"topics\":[\"topic1\"]}}]}}]}}"
+    
     ai_response = generate_curriculum(prompt)
 
     if isinstance(ai_response, dict) and "error" in ai_response:
         return jsonify(ai_response), 500
 
     structured = parse_curriculum(ai_response)
+    if not structured: return jsonify({"error": "Invalid AI response"}), 500
 
-    if not structured or "curriculum" not in structured:
-        return jsonify({"error": "Invalid AI response. The model did not return valid JSON."}), 500
-
-    save_history(skill, duration, structured["curriculum"])
+    # 3. Save History ONLY for logged-in users
+    if user_id:
+        save_history(user_id, skill, duration, structured["curriculum"])
 
     return jsonify(structured)
 
-
 @app.route("/history", methods=["GET"])
 def history():
-    records = SearchHistory.query.order_by(SearchHistory.id.desc()).all()
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "unauthorized", "message": "Please log in to view history"}), 401
 
+    records = SearchHistory.query.filter_by(user_id=user_id).order_by(SearchHistory.id.desc()).all()
     history_list = []
+    
     for r in records:
         try:
             curr_data = json.loads(r.curriculum)
@@ -229,47 +215,39 @@ def history():
             curr_data = []
 
         history_list.append({
-            "id": r.id,
-            "timestamp": r.timestamp,
-            "skill": r.skill,
-            "duration": r.duration,
-            "curriculum": curr_data
+            "id": r.id, "timestamp": r.timestamp, "skill": r.skill,
+            "duration": r.duration, "curriculum": curr_data
         })
 
     return jsonify(history_list)
 
-
 @app.route("/clear-history", methods=["POST"])
 def clear_history():
-    """Clear all history from the database"""
+    user_id = session.get("user_id")
+    if not user_id: return jsonify({"error": "unauthorized"}), 401
     try:
-        db.session.query(SearchHistory).delete()
+        SearchHistory.query.filter_by(user_id=user_id).delete()
         db.session.commit()
-        return jsonify({"success": True, "message": "All history cleared"})
+        return jsonify({"success": True})
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-
 @app.route("/delete-history/<int:item_id>", methods=["POST"])
 def delete_history_item(item_id):
-    """Delete a specific history item from the database"""
+    user_id = session.get("user_id")
+    if not user_id: return jsonify({"error": "unauthorized"}), 401
     try:
-        item = SearchHistory.query.get(item_id)
-        if item:
+        item = db.session.get(SearchHistory, item_id)
+        if item and item.user_id == user_id:
             db.session.delete(item)
             db.session.commit()
-            return jsonify({"success": True, "message": "Item deleted"})
+            return jsonify({"success": True})
         return jsonify({"error": "Item not found"}), 404
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-
-# ---------------- START SERVER ----------------
-
 if __name__ == "__main__":
-    # Dynamically bind port for cloud server environments (like Render)
-    port = int(os.environ.get("PORT", 5050))
-    print(f"Server running on port {port}")
-    app.run(host="0.0.0.0", port=port)
+    print("Server running at http://localhost:5051")
+    app.run(host="0.0.0.0", port=5051)
