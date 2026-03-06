@@ -42,7 +42,7 @@ Requests (API calls)
 **AI Engine:**
 Groq API utilizing llama-3.3-70b-versatile
 
-⚙️ Prerequisites
+ **Prerequisites**
 
 Before you begin, ensure you have the following:
 
@@ -55,43 +55,11 @@ A Google OAuth Client ID (Get one from the Google Cloud Console).
 **Installation & Setup**
 1. Clone the repository
 
-git clone [https://github.com/YOUR_USERNAME/coursecraft.git](https://github.com/YOUR_USERNAME/coursecraft.git)
+git clone [https://github.com/ambatitharunsai-tech/coursecraft.git](https://github.com/ambatitharunsai-tech/coursecraft.git)
 cd coursecraft
 
 
-2. Create and activate a virtual environment (Recommended)
 
-# Mac/Linux
-python3 -m venv venv
-source venv/bin/activate
-
-# Windows
-python -m venv venv
-venv\Scripts\activate
-
-
-3. Install dependencies
-
-pip install -r requirements.txt
-
-
-4. Set up Environment Variables
-Create a .env file in the root directory (or export them in your terminal) and add the following:
-
-GROQ_API_KEY=your_groq_api_key_here
-GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
-SECRET_KEY=your_random_flask_secret_key
-
-
-5. Update the Frontend Client ID
-Open static/script.js (or index.html if inline), find the Google Auth initialization, and ensure the client_id matches your Google Client ID.
-
-6. Run the application
-
-python app.py
-
-
-The app will start running at http://localhost:5051 or http://127.0.0.1:5051.
 
 **📂 Project Structure**
 coursecraft/
