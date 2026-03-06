@@ -79,6 +79,7 @@ def generate_curriculum(prompt):
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"]
     except requests.exceptions.RequestException as e:
+        print(f"GROQ API CRASH DETAILS: {e}")  # <-- Add this line to see the real error!
         return {"error": "LLM request failed or timed out"}
 
 # ---------------- AUTHENTICATION ROUTES ----------------
