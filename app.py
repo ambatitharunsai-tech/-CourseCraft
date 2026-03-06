@@ -169,6 +169,14 @@ def home():
 def generate():
     # 1. Check Limits & Authentication
     user_id = session.get("user_id")
+    user = None
+    
+    # Fetch user if logged in, clear session if stale
+    if user_id:
+        user = db.session.get(User, user_id)
+        if not user:
+            session.pop("user_id", None)
+            user_id = None
     
     if not user_id:
         guest_searches = session.get("guest_searches", 0)
@@ -176,7 +184,6 @@ def generate():
             return jsonify({"error": "limit_reached", "message": "Free limit reached. Sign in to continue."}), 403
         session["guest_searches"] = guest_searches + 1
     else:
-        user = db.session.get(User, user_id)
         user.searches_count += 1
         db.session.commit()
 
