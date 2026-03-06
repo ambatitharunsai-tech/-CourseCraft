@@ -15,7 +15,13 @@ app = Flask(__name__)
 
 # ---------------- SECURITY & DATABASE ----------------
 app.secret_key = os.getenv("SECRET_KEY", "super_secret_development_key_123")
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///history.db'
+
+# Auto-detect Render's PostgreSQL URL or fallback to SQLite locally
+db_url = os.getenv("DATABASE_URL", "sqlite:///history.db")
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -62,9 +68,8 @@ def parse_curriculum(text):
         return None
 
 def generate_curriculum(prompt):
-    api_key = os.getenv("GROQ_API_KEY","").strip()
-    if not api_key:
-        return {"error": "Missing GROQ_API_KEY"}
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key: return {"error": "Missing GROQ_API_KEY"}
 
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -75,11 +80,10 @@ def generate_curriculum(prompt):
     }
 
     try:
-        response = requests.post(url, headers=headers, json=data, timeout=90)
+        response = requests.post(url, headers=headers, json=data, timeout=60)
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"]
     except requests.exceptions.RequestException as e:
-        print(f"GROQ API CRASH DETAILS: {e}")  # <-- Add this line to see the real error!
         return {"error": "LLM request failed or timed out"}
 
 # ---------------- AUTHENTICATION ROUTES ----------------
