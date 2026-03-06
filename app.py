@@ -62,7 +62,7 @@ def parse_curriculum(text):
         return None
 
 def generate_curriculum(prompt):
-    api_key = os.getenv("GROQ_API_KEY").strip()
+    api_key = os.getenv("GROQ_API_KEY","").strip()
     if not api_key:
         return {"error": "Missing GROQ_API_KEY"}
 
