@@ -80,7 +80,7 @@ def generate_curriculum(prompt):
         return {"error_type": "internal", "error": "Missing GROQ_API_KEY"}
     api_key = api_key.strip()
 
-    model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+    model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     data = {
@@ -113,8 +113,11 @@ def generate_curriculum(prompt):
     except requests.exceptions.Timeout:
         return {"error_type": "upstream", "error": "LLM request timed out"}
     except requests.exceptions.RequestException as e:
-        print(f"LLM request error: {e}")
-        return {"error_type": "upstream", "error": "LLM request failed"}
+        error_details = str(e)
+        if hasattr(e, 'response') and e.response is not None:
+            error_details += f" | Body: {e.response.text}"
+        print(f"LLM request error: {error_details}")
+        return {"error_type": "upstream", "error": f"LLM request failed: {error_details}"}
     except Exception as e:
         print(f"Unexpected LLM error: {e}")
         return {"error_type": "internal", "error": "Internal unexpected error"}
