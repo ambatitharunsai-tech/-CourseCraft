@@ -80,7 +80,7 @@ def generate_curriculum(prompt):
         return {"error_type": "internal", "error": "Missing GROQ_API_KEY"}
     api_key = api_key.strip()
 
-    model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    model = os.getenv("GROQ_MODEL", "llama3-8b-8192")
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     data = {
