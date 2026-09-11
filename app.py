@@ -57,8 +57,19 @@ def parse_curriculum(text):
         text = re.sub(r'```json\s*', '', text, flags=re.IGNORECASE)
         text = re.sub(r'```\s*', '', text)
         match = re.search(r'\{.*\}', text, re.S)
-        if not match: return None
-        return json.loads(match.group())
+        if not match: 
+            print("No JSON braces found in text")
+            return None
+        parsed = json.loads(match.group())
+        
+        if not isinstance(parsed, dict) or "curriculum" not in parsed:
+            print("Missing 'curriculum' key in parsed JSON")
+            return None
+        if not isinstance(parsed["curriculum"], list):
+            print("'curriculum' is not a list")
+            return None
+            
+        return parsed
     except Exception as e:
         print(f"Error parsing JSON: {e}")
         return None
@@ -66,23 +77,47 @@ def parse_curriculum(text):
 def generate_curriculum(prompt):
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        return {"error": "Missing GROQ_API_KEY"}
+        return {"error_type": "internal", "error": "Missing GROQ_API_KEY"}
     api_key = api_key.strip()
 
+    model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     data = {
-        "model": "llama-3.3-70b-versatile",
+        "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3
+        "temperature": 0.3,
+        "max_tokens": 4000,
+        "response_format": {"type": "json_object"}
     }
 
     try:
-        response = requests.post(url, headers=headers, json=data, timeout=60)
+        response = requests.post(url, headers=headers, json=data, timeout=(10, 50))
+        if response.status_code == 429:
+            return {"error_type": "upstream", "error": "Rate limit exceeded. Please try again later."}
+        
         response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+        json_data = response.json()
+        
+        if not json_data.get("choices") or not isinstance(json_data["choices"], list):
+            return {"error_type": "upstream", "error": "Malformed response structure from Groq"}
+            
+        message = json_data["choices"][0].get("message", {})
+        content = message.get("content")
+        
+        if not content:
+            return {"error_type": "upstream", "error": "Empty response from Groq"}
+            
+        return {"content": content}
+        
+    except requests.exceptions.Timeout:
+        return {"error_type": "upstream", "error": "LLM request timed out"}
     except requests.exceptions.RequestException as e:
-        return {"error": "LLM request failed or timed out"}
+        print(f"LLM request error: {e}")
+        return {"error_type": "upstream", "error": "LLM request failed"}
+    except Exception as e:
+        print(f"Unexpected LLM error: {e}")
+        return {"error_type": "internal", "error": "Internal unexpected error"}
 
 # ---------------- AUTHENTICATION ROUTES ----------------
 
@@ -224,15 +259,10 @@ def home():
 def generate():
     # 1. Check Authentication
     user_id = session.get("user_id")
-    
     if not user_id:
         return jsonify({"error": "unauthorized", "message": "Sign in to continue."}), 401
         
-    user = db.session.get(User, user_id)
-    user.searches_count += 1
-    db.session.commit()
-
-    # 2. Generation logic
+    # 2. Validate Input
     data = request.json or {}
     skill = data.get("skill", "")
     if skill:
@@ -244,17 +274,31 @@ def generate():
 
     prompt = f"Create a structured learning curriculum for {skill}.\nRules:\n- Provide clear phases\n- Each phase includes courses with topics\n- Return ONLY valid JSON\nFormat:\n{{\"curriculum\":[{{\"phase_title\":\"Phase 1\",\"courses\":[{{\"course_title\":\"Course\",\"topics\":[\"topic1\"]}}]}}]}}"
     
+    # 3. Request LLM Generation
     ai_response = generate_curriculum(prompt)
 
-    if isinstance(ai_response, dict) and "error" in ai_response:
-        return jsonify(ai_response), 500
+    if "error" in ai_response:
+        status_code = 502 if ai_response.get("error_type") == "upstream" else 500
+        return jsonify({"error": ai_response["error"]}), status_code
 
-    structured = parse_curriculum(ai_response)
-    if not structured: return jsonify({"error": "Invalid AI response"}), 500
+    # 4. JSON Validation
+    structured = parse_curriculum(ai_response["content"])
+    if not structured:
+        return jsonify({"error": "Invalid AI response format"}), 502
 
-    # 3. Save History ONLY for logged-in users
-    if user_id:
+    # 5. Persist and Consume Quota AFTER successful generation
+    try:
+        user = db.session.get(User, user_id)
+        if user:
+            user.searches_count += 1
+            # Wait, db.session.commit() for user and save_history can be batched
+            
         save_history(user_id, skill, duration, structured["curriculum"])
+        # save_history commits internally, which also persists user quota increment
+    except Exception as e:
+        db.session.rollback()
+        print(f"Database error saving curriculum: {e}")
+        return jsonify({"error": "Failed to save curriculum history"}), 500
 
     return jsonify(structured)
 
