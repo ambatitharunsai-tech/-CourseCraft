@@ -6,7 +6,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const loader = document.getElementById("loader");
     const toggleBtn = document.getElementById("themeToggle");
     const header = document.querySelector(".header-area");
-    
+
     // History & User elements
     const historyPopup = document.getElementById("historyPopup");
     const historyList = document.getElementById("historyList");
@@ -19,28 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let sortMode = "newest";
     let currentUserState = { logged_in: false, guest_left: 3 };
 
-    /* =========================
-       INITIALIZE GOOGLE AUTH
-    ========================= */
-    window.onload = function() {
-        if (typeof google !== 'undefined') {
-            google.accounts.id.initialize({
-                client_id: "1052463353443-ovsiemfnpl7hka2ejk62co1915ilgq7e.apps.googleusercontent.com", // REPLACE WITH REAL CLIENT ID
-                callback: handleCredentialResponse
-            });
-            // Render inside login limit modal
-            google.accounts.id.renderButton(
-                document.getElementById("googleSignInModalTarget"),
-                { theme: "outline", size: "large" }
-            );
-            // Render inside profile popup
-            google.accounts.id.renderButton(
-                document.getElementById("googleSignInProfileTarget"),
-                { theme: "outline", size: "large" }
-            );
-        }
-        checkAuthStatus(); // Load initial profile state
-    };
+    window.onload = function() { checkAuthStatus(); };
 
     async function handleCredentialResponse(response) {
         try {
@@ -50,7 +29,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 body: JSON.stringify({ token: response.credential })
             });
             const data = await res.json();
-            if(data.success) {
+            if (data.success) {
                 loginModal.style.display = 'none';
                 alert(`Welcome, ${data.name}! Your progress will now be saved.`);
                 checkAuthStatus();
@@ -63,7 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Bypass for users testing without real Google Client Credentials
-    window.devBypassLogin = async function() {
+    window.devBypassLogin = async function () {
         try {
             const res = await fetch('/auth/google', {
                 method: 'POST',
@@ -71,12 +50,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 body: JSON.stringify({ dev_bypass: true })
             });
             const data = await res.json();
-            if(data.success) {
+            if (data.success) {
                 loginModal.style.display = 'none';
                 alert(`Test Login Success! Welcome, ${data.name}!`);
                 checkAuthStatus();
             }
-        } catch(err) { console.error(err); }
+        } catch (err) { console.error(err); }
     };
 
     /* =========================
@@ -94,7 +73,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function updateProfileUI() {
         const targetGoogleBtn = document.getElementById("googleSignInProfileTarget");
-        
+
         if (currentUserState.logged_in) {
             profileContent.innerHTML = `
                 <h2 style="margin: 0 0 5px 0; font-size: 1.8rem;">${currentUserState.name}</h2>
@@ -105,7 +84,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 </div>
                 <button onclick="logout()" style="padding: 12px 25px; border-radius: 50px; cursor: pointer; background: transparent; color: #ff4d4d; border: 2px solid #ff4d4d; font-weight: bold; width: 100%;">Logout</button>
             `;
-            targetGoogleBtn.style.display = "none";
+            if (targetGoogleBtn) targetGoogleBtn.style.display = "none";
         } else {
             profileContent.innerHTML = `
                 <h2 style="margin: 0 0 5px 0; font-size: 1.8rem;">Guest Explorer</h2>
@@ -115,11 +94,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     <p style="margin: 0; font-size: 0.9rem; color: #64748b; font-weight: 600;">Free Searches Left</p>
                 </div>
             `;
-            targetGoogleBtn.style.display = "flex";
+            if (targetGoogleBtn) targetGoogleBtn.style.display = "flex";
         }
     }
 
-    window.logout = async function() {
+    window.logout = async function () {
         await fetch('/auth/logout', { method: 'POST' });
         profilePopup.style.display = "none";
         alert("You have been logged out.");
@@ -164,7 +143,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ skill, duration, level })
                 });
-                
+
                 let data;
                 try {
                     data = await resp.json();
@@ -178,7 +157,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 // Handle limit reached scenario
                 if (resp.status === 403 && data && data.error === "limit_reached") {
                     loginModal.style.display = "flex";
-                    return; 
+                    return;
                 }
 
                 if (!resp.ok) {
@@ -186,9 +165,17 @@ document.addEventListener("DOMContentLoaded", () => {
                     return;
                 }
 
-                header.style.display = "none";
-                render(data, skill);
-                checkAuthStatus(); // Update count
+                const updateUI = () => {
+                    header.style.display = "none";
+                    render(data, skill);
+                    checkAuthStatus(); // Update count
+                };
+
+                if (document.startViewTransition) {
+                    document.startViewTransition(updateUI);
+                } else {
+                    updateUI();
+                }
             } catch (err) {
                 console.error("Fetch Error:", err);
                 loader.style.display = "none";
@@ -205,7 +192,7 @@ document.addEventListener("DOMContentLoaded", () => {
         e.preventDefault();
         document.getElementById('myDropdown').classList.remove('show');
         historyPopup.style.display = "flex";
-        
+
         if (!currentUserState.logged_in) {
             document.getElementById("historyAuthWarning").style.display = "block";
             document.getElementById("historyContentBlock").style.display = "none";
@@ -286,18 +273,18 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!data || !data.curriculum) { resultBox.innerHTML = "<p>Error displaying data.</p>"; return; }
 
         let curr = data.curriculum;
-        if (typeof curr === 'string') { try { curr = JSON.parse(curr); } catch (e) {} }
-        if (curr && curr.curriculum) curr = curr.curriculum; 
+        if (typeof curr === 'string') { try { curr = JSON.parse(curr); } catch (e) { } }
+        if (curr && curr.curriculum) curr = curr.curriculum;
 
-        let html = `<div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid #667eea; padding-bottom: 10px; margin-bottom: 20px;">
+        let html = `<div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid var(--aurora-1); padding-bottom: 10px; margin-bottom: 20px;">
             <h2 style="margin:0;">${skill} Path</h2>
-            <button id="pdfBtn" style="padding:8px 15px; border-radius:8px; cursor:pointer; background: linear-gradient(to right, #667eea, #764ba2); color: white; border: none; font-weight: bold; font-size: 0.9rem;">
+            <button id="pdfBtn" style="padding:8px 15px; border-radius:8px; cursor:pointer; background: linear-gradient(to right, var(--aurora-1), var(--aurora-2)); color: white; border: none; font-weight: bold; font-size: 0.9rem;">
                 📄 Download PDF
             </button></div><div id="pdfContent">`;
 
         curr.forEach(phase => {
             let phaseTitle = phase.phase_title || phase.title || phase.name || "Phase";
-            html += `<div style="margin-top: 20px; font-weight: bold; padding: 10px; background: rgba(102, 126, 234, 0.1); border-left: 4px solid #667eea; border-radius: 4px;">${phaseTitle}</div>`;
+            html += `<div style="margin-top: 20px; font-weight: bold; padding: 10px; background: var(--input-bg); border-left: 4px solid var(--aurora-1); border-radius: 4px;">${phaseTitle}</div>`;
             if (phase.phase_objective) html += `<div style="font-style: italic; opacity: 0.85; margin-bottom: 15px; padding-left: 10px; font-size: 0.95rem;">🎯 <strong>Objective:</strong> ${phase.phase_objective}</div>`;
 
             let courses = phase.courses || phase.modules || phase.topics;
@@ -305,7 +292,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 courses.forEach(c => {
                     let cTitle = c.course_title || c.title || c.name || "Topic";
                     html += `<div style="margin-left: 10px;"><h4 style="margin-bottom: 5px; margin-top: 15px;">${cTitle}</h4>`;
-                    if (c.practical_project) html += `<div style="background: rgba(102, 126, 234, 0.1); border-left: 3px solid #764ba2; padding: 8px 10px; margin: 5px 0 10px 0; border-radius: 4px; font-size: 0.9rem;">🛠️ <strong>Project:</strong> ${c.practical_project}</div>`;
+                    if (c.practical_project) html += `<div style="background: var(--input-bg); border-left: 3px solid var(--aurora-2); padding: 8px 10px; margin: 5px 0 10px 0; border-radius: 4px; font-size: 0.9rem;">🛠️ <strong>Project:</strong> ${c.practical_project}</div>`;
                     html += `<ul style="margin-top: 0;">`;
                     let tops = Array.isArray(c.topics) ? c.topics : [c.topics || "General"];
                     tops.forEach(t => html += `<li style="margin-bottom: 4px;">${t}</li>`);
@@ -329,11 +316,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
             };
             btn.textContent = "⏳ Generating..."; btn.disabled = true;
-            html2pdf().set(opt).from(element).save().then(()=> {
-                btn.textContent = "Downloaded"; setTimeout(()=>{btn.textContent="📄 Download PDF"; btn.disabled=false}, 2000);
+            html2pdf().set(opt).from(element).save().then(() => {
+                btn.textContent = "✅ Downloaded"; setTimeout(() => { btn.textContent = "📄 Download PDF"; btn.disabled = false }, 2000);
             });
         };
     }
 });
-
-

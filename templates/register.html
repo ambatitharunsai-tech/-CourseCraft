@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Register - CourseCraft</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+    <!-- Top Menus -->
+    
+    
+    <div class="main-container">
+        <div class="form-container" style="max-width: 450px; padding: 40px 30px;">
+            <div class="header-area">
+                <div class="logo-container">
+                    <svg class="ai-atom" viewBox="0 0 100 100">
+                        <defs>
+                            <linearGradient id="aiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" class="grad-start" stop-color="var(--aurora-1)" />
+                                <stop offset="100%" class="grad-end" stop-color="var(--aurora-2)" />
+                            </linearGradient>
+                        </defs>
+                        <ellipse class="atom-ring ring-1" cx="50" cy="50" rx="40" ry="15" />
+                        <ellipse class="atom-ring ring-2" cx="50" cy="50" rx="40" ry="15" />
+                        <circle cx="50" cy="50" r="10" fill="url(#aiGrad)" />
+                    </svg>
+                </div>
+                <h1>Create Account</h1>
+                <p>Start building your curriculum</p>
+            </div>
+
+            <div id="errorMsg" style="display:none; color: #ff4d4d; text-align: center; margin-bottom: 15px; font-weight: bold;"></div>
+
+            <form id="registerForm" style="display: flex; flex-direction: column; gap: 15px;">
+                <input type="text" id="name" placeholder="Full Name" required style="width: 100%; padding: 14px 20px; border-radius: 15px; border: 1px solid rgba(100, 116, 139, 0.2); background: var(--input-bg); color: var(--input-text); font-size: 1rem; box-sizing: border-box; outline: none; transition: all 0.3s ease;">
+                <input type="email" id="email" placeholder="Email Address" required style="width: 100%; padding: 14px 20px; border-radius: 15px; border: 1px solid rgba(100, 116, 139, 0.2); background: var(--input-bg); color: var(--input-text); font-size: 1rem; box-sizing: border-box; outline: none; transition: all 0.3s ease;">
+                <input type="password" id="password" placeholder="Password" required style="width: 100%; padding: 14px 20px; border-radius: 15px; border: 1px solid rgba(100, 116, 139, 0.2); background: var(--input-bg); color: var(--input-text); font-size: 1rem; box-sizing: border-box; outline: none; transition: all 0.3s ease;">
+                
+                <button type="submit" style="width: 100%; padding: 14px 20px; border-radius: 20px; background: linear-gradient(135deg, var(--aurora-1) 0%, var(--aurora-2) 100%); color: white; border: none; font-size: 1.1rem; font-weight: bold; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 5px 15px rgba(0, 114, 255, 0.3);">Register</button>
+            </form>
+
+            <div style="margin: 25px 0; text-align: center; color: var(--input-text); opacity: 0.6; position: relative;">
+                <hr style="border: none; border-top: 1px solid var(--glass-border); position: absolute; width: 100%; top: 50%; z-index: -1;">
+                <span style="background: var(--glass-bg); padding: 0 10px;">OR</span>
+            </div>
+
+            <div id="googleSignInTarget" style="display: flex; justify-content: center; margin-bottom: 20px;"></div>
+
+            <p style="text-align: center; margin-top: 10px; font-size: 0.95rem;">
+                Already have an account? <a href="/login" style="color: var(--aurora-1); font-weight: bold; text-decoration: none;">Sign In</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const setDarkMode = (dark) => { document.body.classList.toggle("dark", dark); };
+        const savedTheme = localStorage.getItem("theme");
+        setDarkMode(savedTheme === "dark" || (savedTheme === null && window.matchMedia('(prefers-color-scheme: dark)').matches));
+
+        document.querySelectorAll('input').forEach(i => {
+            i.addEventListener('focus', () => { i.style.borderColor = 'var(--aurora-1)'; i.style.boxShadow = '0 0 0 3px rgba(0, 198, 255, 0.15)'; });
+            i.addEventListener('blur', () => { i.style.borderColor = 'rgba(100, 116, 139, 0.2)'; i.style.boxShadow = 'none'; });
+        });
+
+        // Google Auth
+        window.onload = function () {
+            if (typeof google !== 'undefined') {
+                google.accounts.id.initialize({
+                    client_id: "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
+                    callback: handleCredentialResponse
+                });
+                google.accounts.id.renderButton(
+                    document.getElementById("googleSignInTarget"),
+                    { theme: document.body.classList.contains("dark") ? "filled_black" : "outline", size: "large", text: "signup_with" }
+                );
+            }
+        };
+
+        async function handleCredentialResponse(response) {
+            try {
+                const res = await fetch('/auth/google', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: response.credential })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    window.location.href = '/';
+                } else {
+                    document.getElementById('errorMsg').innerText = data.error;
+                    document.getElementById('errorMsg').style.display = 'block';
+                }
+            } catch (err) { console.error(err); }
+        }
+
+        // Email/Password Register
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            btn.disabled = true;
+            btn.textContent = "Creating Account...";
+
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const res = await fetch('/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email, password })
+                });
+                const data = await res.json();
+                
+                if (res.ok && data.success) {
+                    window.location.href = '/';
+                } else {
+                    document.getElementById('errorMsg').innerText = data.error || 'Registration failed';
+                    document.getElementById('errorMsg').style.display = 'block';
+                }
+            } catch (err) {
+                document.getElementById('errorMsg').innerText = 'Connection error';
+                document.getElementById('errorMsg').style.display = 'block';
+            }
+            btn.disabled = false;
+            btn.textContent = "Register";
+        });
+    </script>
+</body>
+</html>
