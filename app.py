@@ -116,6 +116,13 @@ def generate_curriculum(prompt):
         error_details = str(e)
         if hasattr(e, 'response') and e.response is not None:
             error_details += f" | Body: {e.response.text}"
+            if e.response.status_code in [404, 400] and "model" in e.response.text.lower():
+                try:
+                    models_resp = requests.get("https://api.groq.com/openai/v1/models", headers={"Authorization": f"Bearer {api_key}"})
+                    available = [m.get("id") for m in models_resp.json().get("data", [])]
+                    error_details += f" | AVAILABLE MODELS ON YOUR TIER: {available}"
+                except Exception as ex:
+                    pass
         print(f"LLM request error: {error_details}")
         return {"error_type": "upstream", "error": f"LLM request failed: {error_details}"}
     except Exception as e:
