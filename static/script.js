@@ -312,7 +312,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     
                     let tops = Array.isArray(c.topics) ? c.topics : [c.topics || "General"];
                     tops.forEach(t => {
-                        html += `<div style="display: flex; align-items: flex-start; margin-bottom: 6px; gap: 8px;"><input type="checkbox" class="topic-checkbox" data-skill="${skill}" data-topic="${t.replace(/"/g, '&quot;')}" style="margin-top: 4px; cursor: pointer; width: 16px; height: 16px; accent-color: var(--aurora-1);"> <span style="line-height: 1.4;">${t}</span></div>`;
+                        html += `<div style="display: flex; align-items: flex-start; margin-bottom: 6px; gap: 8px;"><input type="checkbox" class="topic-checkbox" data-skill="${skill}" data-topic="${t.replace(/"/g, '&quot;')}" style="margin-top: 4px; cursor: pointer; width: 16px; height: 16px; accent-color: var(--aurora-1);"> <span style="line-height: 1.4;">${t}</span> <div style="margin-left: auto; display: flex; gap: 6px;">
+                            <a href="https://www.youtube.com/results?search_query=${encodeURIComponent(skill + ' ' + t)}" target="_blank" title="Search YouTube" style="text-decoration:none; filter:grayscale(1); opacity:0.6; transition:0.2s;" onmouseover="this.style.filter='none';this.style.opacity='1'" onmouseout="this.style.filter='grayscale(1)';this.style.opacity='0.6'">🎥</a>
+                            <a href="https://www.google.com/search?q=${encodeURIComponent(skill + ' ' + t)}" target="_blank" title="Search Google" style="text-decoration:none; filter:grayscale(1); opacity:0.6; transition:0.2s;" onmouseover="this.style.filter='none';this.style.opacity='1'" onmouseout="this.style.filter='grayscale(1)';this.style.opacity='0.6'">🔍</a>
+                        </div></div>`;
                     });
                     html += `</div>`;
                 });
@@ -393,4 +396,13 @@ document.addEventListener("DOMContentLoaded", () => {
         localStorage.setItem("theme", isDark ? "dark" : "light");
         const btn = document.getElementById("themeToggleBtn");
         if (btn) btn.innerHTML = isDark ? "☀️ Light Mode" : "🌙 Dark Mode";
+    };
+
+    window.filterHistory = () => {
+        const query = document.getElementById("historySearch").value.toLowerCase();
+        const items = document.querySelectorAll(".history-item");
+        items.forEach(item => {
+            const text = item.querySelector("strong").textContent.toLowerCase();
+            item.style.display = text.includes(query) ? "flex" : "none";
+        });
     };

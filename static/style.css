@@ -410,3 +410,34 @@ body.dark #stream:focus, body.dark .select-row select:focus {
     .menu-container { left: 15px; }
     .new-chat-btn { right: 15px; }
 }
+
+/* Print Optimization */
+@media print {
+    body {
+        background: white !important;
+        color: black !important;
+        padding: 0 !important;
+    }
+    .dark {
+        background: white !important;
+        color: black !important;
+    }
+    header, .search-container, #historyPopup, #profilePopup, .menu-btn, button {
+        display: none !important;
+    }
+    .glass-box {
+        background: none !important;
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    a {
+        text-decoration: none !important;
+        color: black !important;
+    }
+    /* Hide the 🎥 and 🔍 emojis in print */
+    a[title="Search YouTube"], a[title="Search Google"] {
+        display: none !important;
+    }
+}
