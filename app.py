@@ -361,6 +361,20 @@ def delete_history_item(item_id):
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
+
+@app.route("/shared/<int:item_id>", methods=["GET"])
+def shared_curriculum(item_id):
+    item = db.session.get(SearchHistory, item_id)
+    if not item:
+        return jsonify({"error": "Curriculum not found"}), 404
+        
+    try:
+        curr_data = json.loads(item.curriculum)
+    except Exception:
+        curr_data = []
+        
+    return render_template("shared.html", skill=item.skill, curriculum=curr_data)
+
 if __name__ == "__main__":
     print("Server running at http://localhost:5050")
     app.run(host="0.0.0.0", port=5050)

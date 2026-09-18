@@ -237,6 +237,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     <strong style="color: var(--aurora-2)">${item.skill}</strong><br>
                     <small style="opacity: 0.7">${item.duration} • ${item.timestamp}</small>
                 </div>
+                <button class="share-btn" style="background: transparent; border: none; color: var(--aurora-1); font-size: 1.2rem; cursor: pointer; margin-right: 10px;" title="Copy Share Link">🔗</button>
                 <button class="delete-btn" style="background: transparent; border: none; color: #ff4d4d; font-size: 1.2rem; cursor: pointer;">🗑</button>
             `;
 
@@ -246,6 +247,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 historyPopup.style.display = "none";
             };
 
+            div.querySelector('.share-btn').onclick = (e) => {
+                e.stopPropagation();
+                const shareUrl = window.location.origin + '/shared/' + item.id;
+                navigator.clipboard.writeText(shareUrl).then(() => {
+                    const btn = e.target;
+                    btn.textContent = '✅';
+                    setTimeout(() => btn.textContent = '🔗', 2000);
+                });
+            };
             div.querySelector('.delete-btn').onclick = async (e) => {
                 e.stopPropagation();
                 if (confirm(`Delete '${item.skill}' from history?`)) {
@@ -278,9 +288,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
         let html = `<div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid var(--aurora-1); padding-bottom: 10px; margin-bottom: 20px;">
             <h2 style="margin:0;">${skill} Path</h2>
-            <button id="pdfBtn" style="padding:8px 15px; border-radius:8px; cursor:pointer; background: linear-gradient(to right, var(--aurora-1), var(--aurora-2)); color: white; border: none; font-weight: bold; font-size: 0.9rem;">
-                📄 Download PDF
-            </button></div><div id="pdfContent">`;
+            <div style="display: flex; gap: 10px;">
+                <button id="pdfBtn" style="padding:8px 15px; border-radius:8px; cursor:pointer; background: linear-gradient(to right, var(--aurora-1), var(--aurora-2)); color: white; border: none; font-weight: bold; font-size: 0.9rem;">
+                    📄 PDF
+                </button>
+                <button id="mdBtn" style="padding:8px 15px; border-radius:8px; cursor:pointer; background: transparent; border: 2px solid var(--aurora-1); color: var(--aurora-1); font-weight: bold; font-size: 0.9rem;">
+                    ⬇️ Markdown
+                </button>
+            </div>
+        </div><div id="pdfContent">`;
 
         curr.forEach(phase => {
             let phaseTitle = phase.phase_title || phase.title || phase.name || "Phase";
@@ -293,10 +309,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     let cTitle = c.course_title || c.title || c.name || "Topic";
                     html += `<div style="margin-left: 10px;"><h4 style="margin-bottom: 5px; margin-top: 15px;">${cTitle}</h4>`;
                     if (c.practical_project) html += `<div style="background: var(--input-bg); border-left: 3px solid var(--aurora-2); padding: 8px 10px; margin: 5px 0 10px 0; border-radius: 4px; font-size: 0.9rem;">🛠️ <strong>Project:</strong> ${c.practical_project}</div>`;
-                    html += `<ul style="margin-top: 0;">`;
+                    
                     let tops = Array.isArray(c.topics) ? c.topics : [c.topics || "General"];
-                    tops.forEach(t => html += `<li style="margin-bottom: 4px;">${t}</li>`);
-                    html += `</ul></div>`;
+                    tops.forEach(t => {
+                        html += `<div style="display: flex; align-items: flex-start; margin-bottom: 6px; gap: 8px;"><input type="checkbox" class="topic-checkbox" data-skill="${skill}" data-topic="${t.replace(/"/g, '&quot;')}" style="margin-top: 4px; cursor: pointer; width: 16px; height: 16px; accent-color: var(--aurora-1);"> <span style="line-height: 1.4;">${t}</span></div>`;
+                    });
+                    html += `</div>`;
                 });
             }
         });
@@ -304,7 +322,7 @@ document.addEventListener("DOMContentLoaded", () => {
         html += `</div>`;
         resultBox.innerHTML = html;
 
-        // Simplified PDF binder hook
+        // PDF Binder
         document.getElementById("pdfBtn").onclick = (e) => {
             e.preventDefault();
             const btn = document.getElementById("pdfBtn");
@@ -315,10 +333,64 @@ document.addEventListener("DOMContentLoaded", () => {
                 html2canvas: { scale: 2, useCORS: true },
                 jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
             };
-            btn.textContent = "⏳ Generating..."; btn.disabled = true;
+            btn.textContent = "⏳..."; btn.disabled = true;
             html2pdf().set(opt).from(element).save().then(() => {
-                btn.textContent = "✅ Downloaded"; setTimeout(() => { btn.textContent = "📄 Download PDF"; btn.disabled = false }, 2000);
+                btn.textContent = "✅"; setTimeout(() => { btn.textContent = "📄 PDF"; btn.disabled = false }, 2000);
             });
         };
+
+        // Markdown Binder
+        document.getElementById("mdBtn").onclick = () => {
+            let md = `# ${skill} Learning Curriculum\n\n`;
+            curr.forEach(phase => {
+                md += `## ${phase.phase_title || phase.title || phase.name || "Phase"}\n`;
+                if (phase.phase_objective) md += `*Objective: ${phase.phase_objective}*\n\n`;
+                let courses = phase.courses || phase.modules || phase.topics;
+                if (Array.isArray(courses)) {
+                    courses.forEach(c => {
+                        md += `### ${c.course_title || c.title || c.name || "Topic"}\n`;
+                        if (c.practical_project) md += `**Project:** ${c.practical_project}\n\n`;
+                        let tops = Array.isArray(c.topics) ? c.topics : [c.topics || "General"];
+                        tops.forEach(t => md += `- [ ] ${t}\n`);
+                        md += `\n`;
+                    });
+                }
+            });
+            const blob = new Blob([md], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url;
+            a.download = `${skill.replace(/\s+/g, '_')}_Curriculum.md`;
+            a.click(); URL.revokeObjectURL(url);
+        };
+
+        // Checkbox Binder
+        const progressKey = 'courseCraft_progress_' + skill;
+        const saved = JSON.parse(localStorage.getItem(progressKey) || '{}');
+        document.querySelectorAll('.topic-checkbox').forEach(cb => {
+            if (saved[cb.dataset.topic]) {
+                cb.checked = true;
+                cb.nextElementSibling.style.textDecoration = 'line-through';
+                cb.nextElementSibling.style.opacity = '0.6';
+            }
+            cb.addEventListener('change', (e) => {
+                const isChecked = e.target.checked;
+                saved[cb.dataset.topic] = isChecked;
+                localStorage.setItem(progressKey, JSON.stringify(saved));
+                if (isChecked) {
+                    cb.nextElementSibling.style.textDecoration = 'line-through';
+                    cb.nextElementSibling.style.opacity = '0.6';
+                } else {
+                    cb.nextElementSibling.style.textDecoration = 'none';
+                    cb.nextElementSibling.style.opacity = '1';
+                }
+            });
+        });
     }
 });
+
+    window.toggleTheme = () => {
+        const isDark = document.body.classList.toggle("dark");
+        localStorage.setItem("theme", isDark ? "dark" : "light");
+        const btn = document.getElementById("themeToggleBtn");
+        if (btn) btn.innerHTML = isDark ? "☀️ Light Mode" : "🌙 Dark Mode";
+    };
