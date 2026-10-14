@@ -1,7 +1,13 @@
 from flask import Flask, request, jsonify, send_file, render_template, session, redirect, url_for
-import requests, json, re, os, io, datetime
+import requests, json, re, os, io, datetime, logging
+from dotenv import load_dotenv
+from sqlalchemy import text as sql_text
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
+
+load_dotenv()
+logging.basicConfig(level=os.getenv('LOG_LEVEL', 'INFO'))
+logger = logging.getLogger(__name__)
 
 # Google Auth Imports
 try:
@@ -16,8 +22,25 @@ app = Flask(__name__)
 
 # ---------------- SECURITY & DATABASE ----------------
 app.secret_key = os.getenv("SECRET_KEY", "super_secret_development_key_123")
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///history.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = bool(os.getenv("RENDER_EXTERNAL_URL"))
+
+# SQLite is convenient for local development. Configure DATABASE_URL on Render
+# to use persistent PostgreSQL (for example, a dedicated Supabase database).
+database_url = os.getenv("DATABASE_URL", "sqlite:///history.db").strip()
+if database_url.startswith("postgres://"):
+    database_url = "postgresql+psycopg://" + database_url[len("postgres://"):]
+elif database_url.startswith("postgresql://"):
+    database_url = "postgresql+psycopg://" + database_url[len("postgresql://"):]
+
+engine_options = {"pool_pre_ping": True}
+if database_url.startswith("postgresql+psycopg://"):
+    engine_options.update({"pool_recycle": 300, "pool_size": 3, "max_overflow": 2})
+
+app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = engine_options
 db = SQLAlchemy(app)
 
 class User(db.Model):
@@ -52,82 +75,125 @@ def save_history(user_id, skill, duration, curriculum):
     db.session.add(record)
     db.session.commit()
 
-def parse_curriculum(text):
-    try:
-        text = re.sub(r'```json\s*', '', text, flags=re.IGNORECASE)
-        text = re.sub(r'```\s*', '', text)
-        match = re.search(r'\{.*\}', text, re.S)
-        if not match: 
-            print("No JSON braces found in text")
-            return None
-        parsed = json.loads(match.group())
-        
-        if not isinstance(parsed, dict) or "curriculum" not in parsed:
-            print("Missing 'curriculum' key in parsed JSON")
-            return None
-        if not isinstance(parsed["curriculum"], list):
-            print("'curriculum' is not a list")
-            return None
-            
-        return parsed
-    except Exception as e:
-        print(f"Error parsing JSON: {e}")
+def parse_curriculum(raw_text):
+    """Parse and validate the minimum curriculum contract expected by the UI."""
+    if not isinstance(raw_text, str) or not raw_text.strip():
         return None
 
-def generate_curriculum(prompt):
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        return {"error_type": "internal", "error": "Missing GROQ_API_KEY"}
-    api_key = api_key.strip()
+    candidate = raw_text.strip()
+    candidate = re.sub(r"^\`\`\`(?:json)?\s*|\s*\`\`\`$", "", candidate, flags=re.IGNORECASE).strip()
 
-    model = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+    try:
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            # Compatibility fallback for providers that wrap JSON with prose.
+            start, end = candidate.find("{"), candidate.rfind("}")
+            if start < 0 or end <= start:
+                return None
+            parsed = json.loads(candidate[start:end + 1])
+
+        if not isinstance(parsed, dict):
+            return None
+        curriculum = parsed.get("curriculum")
+        if not isinstance(curriculum, list) or not curriculum:
+            return None
+
+        for phase in curriculum:
+            if not isinstance(phase, dict):
+                return None
+            if not isinstance(phase.get("phase_title"), str) or not phase["phase_title"].strip():
+                return None
+            courses = phase.get("courses")
+            if not isinstance(courses, list) or not courses:
+                return None
+            for course in courses:
+                if not isinstance(course, dict):
+                    return None
+                if not isinstance(course.get("course_title"), str) or not course["course_title"].strip():
+                    return None
+                topics = course.get("topics")
+                if not isinstance(topics, list) or not topics:
+                    return None
+                if any(not isinstance(topic, str) or not topic.strip() for topic in topics):
+                    return None
+
+        return {"curriculum": curriculum}
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        logger.warning("Could not parse curriculum JSON (%s)", type(exc).__name__)
+        return None
+
+
+def generate_curriculum(prompt):
+    api_key = os.getenv("GROQ_API_KEY", "").strip()
+    if not api_key:
+        return {
+            "error_type": "configuration",
+            "error": "AI generation is not configured. Set GROQ_API_KEY in the server environment."
+        }
+
+    model = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b").strip()
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    data = {
+    payload = {
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a curriculum designer. Return only one valid JSON object with a top-level curriculum array. Do not include Markdown fences or extra commentary."
+            },
+            {"role": "user", "content": prompt}
+        ],
         "temperature": 0.3,
-        "max_tokens": 4000,
+        "max_tokens": 3000,
         "response_format": {"type": "json_object"}
     }
 
     try:
-        response = requests.post(url, headers=headers, json=data, timeout=(10, 50))
+        response = requests.post(url, headers=headers, json=payload, timeout=(10, 50))
         if response.status_code == 429:
-            return {"error_type": "upstream", "error": "Rate limit exceeded. Please try again later."}
-        
-        response.raise_for_status()
-        json_data = response.json()
-        
-        if not json_data.get("choices") or not isinstance(json_data["choices"], list):
-            return {"error_type": "upstream", "error": "Malformed response structure from Groq"}
-            
-        message = json_data["choices"][0].get("message", {})
-        content = message.get("content")
-        
-        if not content:
-            return {"error_type": "upstream", "error": "Empty response from Groq"}
-            
+            logger.warning("Groq rate limit returned HTTP 429")
+            return {"error_type": "upstream", "error": "The AI provider is rate-limiting requests. Please retry shortly."}
+
+        if not response.ok:
+            logger.warning("Groq returned HTTP %s: %s", response.status_code, response.text[:600])
+            if response.status_code in (401, 403):
+                message = "AI provider authentication failed. Check GROQ_API_KEY."
+            elif response.status_code == 400:
+                message = "AI provider rejected the model or request. Check GROQ_MODEL and model access."
+            else:
+                message = f"AI provider request failed (HTTP {response.status_code})."
+            return {"error_type": "upstream", "error": message}
+
+        try:
+            body = response.json()
+        except ValueError:
+            logger.warning("Groq returned a non-JSON HTTP response")
+            return {"error_type": "upstream", "error": "AI provider returned an unreadable response."}
+
+        choices = body.get("choices") if isinstance(body, dict) else None
+        if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+            logger.warning("Groq response has no valid choices array")
+            return {"error_type": "upstream", "error": "AI provider returned an invalid response structure."}
+
+        message = choices[0].get("message") or {}
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, str) or not content.strip():
+            logger.warning("Groq response had empty content")
+            return {"error_type": "upstream", "error": "AI provider returned an empty response."}
+
         return {"content": content}
-        
+
     except requests.exceptions.Timeout:
-        return {"error_type": "upstream", "error": "LLM request timed out"}
-    except requests.exceptions.RequestException as e:
-        error_details = str(e)
-        if hasattr(e, 'response') and e.response is not None:
-            error_details += f" | Body: {e.response.text}"
-            if e.response.status_code in [404, 400] and "model" in e.response.text.lower():
-                try:
-                    models_resp = requests.get("https://api.groq.com/openai/v1/models", headers={"Authorization": f"Bearer {api_key}"})
-                    available = [m.get("id") for m in models_resp.json().get("data", [])]
-                    error_details += f" | AVAILABLE MODELS ON YOUR TIER: {available}"
-                except Exception as ex:
-                    pass
-        print(f"LLM request error: {error_details}")
-        return {"error_type": "upstream", "error": f"LLM request failed: {error_details}"}
-    except Exception as e:
-        print(f"Unexpected LLM error: {e}")
-        return {"error_type": "internal", "error": "Internal unexpected error"}
+        logger.warning("Groq request timed out")
+        return {"error_type": "upstream", "error": "AI generation timed out. Please try again."}
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Groq request failed (%s)", type(exc).__name__)
+        return {"error_type": "upstream", "error": "Could not reach the AI provider. Please try again shortly."}
+    except Exception as exc:
+        logger.exception("Unexpected error during Groq request (%s)", type(exc).__name__)
+        return {"error_type": "internal", "error": "An unexpected server error occurred during AI generation."}
+
 
 # ---------------- AUTHENTICATION ROUTES ----------------
 
@@ -154,103 +220,107 @@ def get_user():
 
 @app.route("/auth/google", methods=["POST"])
 def auth_google():
-    """Validates Google JWT and creates/logs in the user"""
-    data = request.json or {}
+    """Verify a Google ID token and create or sign in the corresponding user."""
+    data = request.get_json(silent=True) or {}
     token = data.get("token")
-    is_dev_bypass = data.get("dev_bypass")
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
 
-    # Developer bypass for testing without actual Google Credentials
-    if is_dev_bypass:
-        user = User.query.filter_by(google_id="dev-123").first()
-        if not user:
-            user = User(google_id="dev-123", email="test@example.com", name="Test Explorer")
-            db.session.add(user)
-            db.session.commit()
-        session['user_id'] = user.id
-        return jsonify({"success": True, "name": user.name})
-
+    if not isinstance(token, str) or not token:
+        return jsonify({"error": "Missing Google credential"}), 400
+    if not client_id:
+        return jsonify({"error": "Google sign-in is not configured. Use email and password or configure GOOGLE_CLIENT_ID."}), 503
     if not GOOGLE_AUTH_AVAILABLE:
-        return jsonify({"error": "google-auth library not installed on server"}), 500
+        return jsonify({"error": "Google sign-in dependencies are unavailable"}), 503
 
     try:
-        # REPLACE 'YOUR_GOOGLE_CLIENT_ID' WITH YOUR ACTUAL CLIENT ID FROM GCP
-        CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "YOUR_GOOGLE_CLIENT_ID")
-        
-        if CLIENT_ID == "YOUR_GOOGLE_CLIENT_ID":
-            # Insecure fallback strictly for demonstration if Client ID isn't set
-            idinfo = google.auth.jwt.decode(token, verify=False)
-        else:
-            # Secure verification
-            idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), CLIENT_ID)
+        idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), client_id)
+        if not idinfo.get("email_verified"):
+            return jsonify({"error": "Google account email is not verified"}), 401
 
-        google_id = idinfo['sub']
-        email = idinfo.get('email')
-        
+        google_id = idinfo.get("sub")
+        email = (idinfo.get("email") or "").strip().lower()
+        name = (idinfo.get("name") or email.split("@")[0]).strip()[:100]
+        if not google_id or not email:
+            return jsonify({"error": "Google did not provide a verified email"}), 401
+
         user = User.query.filter_by(google_id=google_id).first()
-        
-        if not user and email:
-            # Check if user registered with email/password first
+        if not user:
             user = User.query.filter_by(email=email).first()
             if user:
-                # Link google account
+                if user.google_id and user.google_id != google_id:
+                    return jsonify({"error": "This email is linked to a different Google account"}), 409
                 user.google_id = google_id
             else:
-                user = User(google_id=google_id, email=email, name=idinfo.get('name'))
+                user = User(google_id=google_id, email=email, name=name or email)
                 db.session.add(user)
-        elif not user:
-            # Fallback if no email (unlikely for google auth)
-            user = User(google_id=google_id, email=f"google_{google_id}@example.com", name=idinfo.get('name'))
-            db.session.add(user)
-            
+
         db.session.commit()
-        session['user_id'] = user.id
+        session.clear()
+        session["user_id"] = user.id
         return jsonify({"success": True, "name": user.name})
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    except Exception as exc:
+        db.session.rollback()
+        logger.warning("Google sign-in verification failed (%s)", type(exc).__name__)
+        return jsonify({"error": "Google sign-in could not be verified. Try again or use email and password."}), 401
+
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "GET":
-        return render_template("register.html")
-    
-    data = request.json or {}
+        return render_template("register.html", google_client_id=os.getenv("GOOGLE_CLIENT_ID", ""))
+
+    data = request.get_json(silent=True) or {}
     name = data.get("name")
     email = data.get("email")
     password = data.get("password")
-    
+
+    if not all(isinstance(value, str) for value in (name, email, password)):
+        return jsonify({"error": "Name, email, and password are required"}), 400
+    name, email = name.strip(), email.strip().lower()
     if not name or not email or not password:
-        return jsonify({"error": "Missing required fields"}), 400
-        
+        return jsonify({"error": "Name, email, and password are required"}), 400
+    if len(name) > 100 or len(email) > 100:
+        return jsonify({"error": "Name or email is too long"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must contain at least 8 characters"}), 400
+
     if User.query.filter_by(email=email).first():
-        return jsonify({"error": "Email already registered"}), 400
-        
-    hashed_pw = generate_password_hash(password)
-    user = User(email=email, name=name, password_hash=hashed_pw)
-    db.session.add(user)
-    db.session.commit()
-    
-    session['user_id'] = user.id
-    return jsonify({"success": True, "name": user.name})
+        return jsonify({"error": "Email already registered"}), 409
+
+    user = User(email=email, name=name, password_hash=generate_password_hash(password))
+    try:
+        db.session.add(user)
+        db.session.commit()
+        session.clear()
+        session["user_id"] = user.id
+        return jsonify({"success": True, "name": user.name})
+    except Exception as exc:
+        db.session.rollback()
+        logger.exception("Registration failed (%s)", type(exc).__name__)
+        return jsonify({"error": "Could not create the account. Please try again."}), 500
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
-        return render_template("login.html")
-        
-    data = request.json or {}
+        return render_template("login.html", google_client_id=os.getenv("GOOGLE_CLIENT_ID", ""))
+
+    data = request.get_json(silent=True) or {}
     email = data.get("email")
     password = data.get("password")
-    
-    if not email or not password:
-        return jsonify({"error": "Missing email or password"}), 400
-        
+    if not isinstance(email, str) or not isinstance(password, str) or not email.strip() or not password:
+        return jsonify({"error": "Email and password are required"}), 400
+
+    email = email.strip().lower()
     user = User.query.filter_by(email=email).first()
     if not user or not user.password_hash or not check_password_hash(user.password_hash, password):
         return jsonify({"error": "Invalid email or password"}), 401
-        
-    session['user_id'] = user.id
+
+    session.clear()
+    session["user_id"] = user.id
     return jsonify({"success": True, "name": user.name})
+
 
 @app.route("/auth/logout", methods=["POST"])
 def logout():
@@ -267,50 +337,74 @@ def home():
 
 @app.route("/generate", methods=["POST"])
 def generate():
-    # 1. Check Authentication
     user_id = session.get("user_id")
     if not user_id:
-        return jsonify({"error": "unauthorized", "message": "Sign in to continue."}), 401
-        
-    # 2. Validate Input
-    data = request.json or {}
+        return jsonify({"error": "Please sign in to generate and save a curriculum."}), 401
+
+    user = db.session.get(User, user_id)
+    if not user:
+        session.clear()
+        return jsonify({"error": "Your session has expired. Please sign in again."}), 401
+
+    data = request.get_json(silent=True) or {}
     skill = data.get("skill", "")
-    if skill:
-        skill = skill.strip()
-    duration = data.get("duration", "6 Months")
+    duration = data.get("duration") or "6 Months"
+    level = data.get("level") or "Beginner"
 
-    if not skill:
+    if not isinstance(skill, str) or not skill.strip():
         return jsonify({"error": "Skill cannot be empty"}), 400
+    if not isinstance(duration, str) or not isinstance(level, str):
+        return jsonify({"error": "Duration and experience level must be text"}), 400
 
-    prompt = f"Create a structured learning curriculum for {skill}.\nRules:\n- Provide clear phases\n- Each phase includes courses with topics\n- Return ONLY valid JSON\nFormat:\n{{\"curriculum\":[{{\"phase_title\":\"Phase 1\",\"courses\":[{{\"course_title\":\"Course\",\"topics\":[\"topic1\"]}}]}}]}}"
-    
-    # 3. Request LLM Generation
+    skill = skill.strip()
+    duration = duration.strip()[:50]
+    level = level.strip()[:40]
+    if len(skill) > 120:
+        return jsonify({"error": "Please keep the skill or topic under 120 characters"}), 400
+    if not duration:
+        duration = "6 Months"
+    if not level:
+        level = "Beginner"
+
+    prompt = f"""Create a practical, progressive learning curriculum.
+
+Skill or goal: {skill}
+Target duration: {duration}
+Learner's current level: {level}
+
+Requirements:
+- Progress from fundamentals toward the requested level.
+- Provide 3 to 6 chronological phases sized for the target duration.
+- Every phase must include at least one course.
+- Every course must have 3 to 8 concise, accurate topics.
+- Include a practical_project string for each course when appropriate.
+- Use recognized terminology and avoid invented facts.
+- Return ONLY a valid JSON object, with no Markdown or extra prose.
+- The object must follow this structure:
+{{"curriculum":[{{"phase_title":"Phase 1: Fundamentals","courses":[{{"course_title":"Course title","topics":["Topic 1","Topic 2"],"practical_project":"A small practical project"}}]}}]}}
+"""
+
     ai_response = generate_curriculum(prompt)
-
     if "error" in ai_response:
-        status_code = 502 if ai_response.get("error_type") == "upstream" else 500
+        error_type = ai_response.get("error_type")
+        status_code = {"upstream": 502, "configuration": 503, "internal": 500}.get(error_type, 502)
         return jsonify({"error": ai_response["error"]}), status_code
 
-    # 4. JSON Validation
-    structured = parse_curriculum(ai_response["content"])
+    structured = parse_curriculum(ai_response.get("content"))
     if not structured:
-        return jsonify({"error": "Invalid AI response format"}), 502
+        return jsonify({"error": "The AI provider returned invalid curriculum data. Please try again."}), 502
 
-    # 5. Persist and Consume Quota AFTER successful generation
     try:
-        user = db.session.get(User, user_id)
-        if user:
-            user.searches_count += 1
-            # Wait, db.session.commit() for user and save_history can be batched
-            
+        # The history insert and successful-generation counter increment share a commit.
+        user.searches_count = (user.searches_count or 0) + 1
         save_history(user_id, skill, duration, structured["curriculum"])
-        # save_history commits internally, which also persists user quota increment
-    except Exception as e:
+    except Exception as exc:
         db.session.rollback()
-        print(f"Database error saving curriculum: {e}")
-        return jsonify({"error": "Failed to save curriculum history"}), 500
+        logger.exception("Database error while saving generated curriculum (%s)", type(exc).__name__)
+        return jsonify({"error": "The curriculum was generated but could not be saved. Check database connectivity and try again."}), 500
 
     return jsonify(structured)
+
 
 @app.route("/history", methods=["GET"])
 def history():
@@ -374,6 +468,18 @@ def shared_curriculum(item_id):
         curr_data = []
         
     return render_template("shared.html", skill=item.skill, curriculum=curr_data)
+
+@app.route("/health", methods=["GET"])
+def health():
+    """Health check for Render and diagnostics; verifies database connectivity."""
+    try:
+        db.session.execute(sql_text("SELECT 1"))
+        return jsonify({"status": "ok", "database": "connected"}), 200
+    except Exception as exc:
+        db.session.rollback()
+        logger.warning("Health check database failure (%s)", type(exc).__name__)
+        return jsonify({"status": "degraded", "database": "unavailable"}), 503
+
 
 if __name__ == "__main__":
     print("Server running at http://localhost:5050")

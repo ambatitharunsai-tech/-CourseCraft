@@ -4,3 +4,12 @@ outputs/
 *.pyc
 .DS_Store
 .envinstance/
+
+# Local secrets and Python tooling
+.env
+.env.*
+!.env.example
+.venv/
+.pytest_cache/
+instance/*.db
+*.sqlite3

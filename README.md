@@ -1,121 +1,125 @@
-**CourseCraft - AI Learning Path Generator**
-CourseCraft is an AI-powered web application that generates structured, highly customized learning paths for any skill. 
-Built with Flask and the Groq API (Llama 3), it takes the guesswork out of learning by providing phased curriculums complete 
-with objectives, topics, and practical projects.
+# CourseCraft — AI Learning Path Generator
 
-**Features**
+CourseCraft is a Flask web application that creates structured learning curricula for a skill or career goal. It uses Groq chat completions for AI generation, SQLAlchemy for accounts and saved history, and a responsive vanilla HTML/CSS/JavaScript interface.
 
-🧠 AI-Powered Generation: Instantly builds comprehensive curriculums based on skill, duration, and experience level.
+**Live app:** https://coursecraft-e1jx.onrender.com  
+**Repository:** https://github.com/ambatitharunsai-tech/-CourseCraft
 
-🔐 Google Authentication: Secure user login using Google Identity Services.
+## Features
 
-📊 Private History Tracking: Logged-in users can save, view, search, and delete their past generated curriculums.
+- **Curriculum generation:** uses the skill/topic, target duration, and experience level to create a phased learning path.
+- **Account access:** email/password registration and login; Google sign-in is optional and requires a configured Google OAuth client ID.
+- **Saved history:** signed-in users can browse, search, sort, open, and delete previous curricula, or clear their history.
+- **Sharing:** generated curricula have shareable links.
+- **Exports:** download curricula as PDF or Markdown.
+- **Learning progress:** mark topics complete; progress is stored in the browser for that skill.
+- **Learning resources:** links to relevant web and YouTube searches for topics.
+- **Personalization:** dark/light mode, spell-check assistance where dictionary assets are available, and a profile panel.
+- **Database health check:** `GET /health` tests the database connection and returns a non-sensitive status.
 
-⏳ Guest Quotas: Unregistered users get 3 free generations before being prompted to sign in.
+CourseCraft currently requires sign-in to generate and save curricula. Guest quota text in older versions of this README was outdated.
 
-📄 PDF Export: Download any generated curriculum as a clean, beautifully formatted PDF.
+## Architecture
 
-🌓 Dark/Light Mode: Premium "Aurora Tech" UI theme that automatically adapts to system preferences.
+- **Backend:** Python, Flask, Flask-SQLAlchemy, SQLAlchemy
+- **Database:** SQLite for local development; PostgreSQL when `DATABASE_URL` is configured
+- **AI:** Groq Chat Completions API; default model `qwen/qwen3.8-27b`, overridable with `GROQ_MODEL`
+- **Frontend:** Jinja templates, HTML, CSS, vanilla JavaScript
+- **Deployment:** Render web service running `gunicorn app:app`
 
-⚡ Spell Checking: Built-in typo correction for skill inputs.
+The application creates the `user` and `search_history` tables with SQLAlchemy on startup. Use a persistent PostgreSQL database for production; a local SQLite file on an ephemeral hosting filesystem is not a reliable production store.
 
-🛠️ Tech Stack
+## Local development
 
-**Frontend**
+Requirements: Python 3.10 or newer, a Groq API key, and (optionally) a Google OAuth client ID.
 
-HTML5, CSS3, Vanilla JavaScript
+1. Clone the repository:
 
-html2pdf.js (for PDF generation)
+   ```bash
+   git clone https://github.com/ambatitharunsai-tech/-CourseCraft.git
+   cd -CourseCraft
+   ```
 
-Google Identity Services API
+2. Create a virtual environment and install packages:
 
-Backend:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate       # macOS/Linux
+   # .venv\Scripts\activate      # Windows
+   pip install -r requirements.txt
+   ```
 
-Python 3.x
+3. Create your local environment file:
 
-Flask (Web Framework)
+   ```bash
+   cp .env.example .env
+   ```
 
-Flask-SQLAlchemy (SQLite Database for users and history)
+   Set `GROQ_API_KEY` and a long random `SECRET_KEY`. Set `GOOGLE_CLIENT_ID` only if you have configured Google Identity Services in Google Cloud Console. Never commit real credentials.
 
-Requests (API calls)
+4. Start the app:
 
-**AI Engine:**
-Groq API utilizing llama-3.3-70b-versatile
+   ```bash
+   python app.py
+   ```
 
- **Prerequisites**
+5. Open http://127.0.0.1:5050.
 
-Before you begin, ensure you have the following:
+When `DATABASE_URL` is omitted, local development uses SQLite. Set it to a PostgreSQL connection string to exercise the persistent database path locally.
 
-Python 3.8+ installed on your machine.
+## Environment variables
 
-A Groq API Key (Get one free at console.groq.com).
+| Variable | Required | Purpose |
+|---|---|---|
+| `SECRET_KEY` | Yes for deployment | Stable, random Flask session-signing key. Do not use the development fallback in production. |
+| `GROQ_API_KEY` | Yes for generation | Server-side Groq API key. Never put this in frontend JavaScript. |
+| `GROQ_MODEL` | No | Groq model ID. Defaults to `qwen/qwen3.8-27b`. |
+| `DATABASE_URL` | Yes for persistent production storage | PostgreSQL connection string. Omit locally to use SQLite. |
+| `GOOGLE_CLIENT_ID` | No | Google OAuth client ID used to render the Google sign-in button and verify ID tokens. |
+| `LOG_LEVEL` | No | Python logging level; defaults to `INFO`. |
 
-A Google OAuth Client ID (Get one from the Google Cloud Console).
+See [`.env.example`](.env.example) for a safe template. Values in that file are placeholders only.
 
-**Installation & Setup**
-1. Clone the repository
+## Connect a Supabase PostgreSQL database
 
-git clone [https://github.com/ambatitharunsai/coursecraft.git](https://github.com/ambatitharunsai/coursecraft.git)
-cd coursecraft
+1. Create a **separate Supabase project for CourseCraft** (do not reuse another app's student or business tables).
+2. In Supabase, open **Connect** and select the PostgreSQL connection string. For Render, prefer the IPv4-compatible **Supavisor session pooler** connection string if your project's direct endpoint is not reachable over IPv4. Use the pooler's session mode for a long-running Flask/Gunicorn service. Add `sslmode=require` when provided by the Supabase connection string.
+3. In Render, open the CourseCraft web service settings and add the complete connection string as the secret environment variable `DATABASE_URL`. Keep it server-side; never put it in templates or static JavaScript.
+4. Add `SECRET_KEY` and `GROQ_API_KEY` in Render environment settings if not already configured. Set `GOOGLE_CLIENT_ID` if Google login is wanted.
+5. Redeploy the service, then open `/health`. A successful connection returns `{"status":"ok","database":"connected"}`.
+6. In Supabase Table Editor, verify the `user` and `search_history` tables exist. Registration and curriculum history should persist across application redeploys.
 
+**Existing data:** switching from SQLite to PostgreSQL creates the schema but does not automatically copy local or existing SQLite records. Export/import any data you need before switching production databases.
 
-2. Create and activate a virtual environment (Recommended)
+References: [Supabase PostgreSQL connection options](https://supabase.com/docs/guides/database/connecting-to-postgres) and [SQLAlchemy with Supabase](https://supabase.com/docs/guides/troubleshooting/using-sqlalchemy-with-supabase-FUqebT).
 
-# Mac/Linux
-python3 -m venv venv
-source venv/bin/activate
+## Render deployment
 
-# Windows
-python -m venv venv
-venv\Scripts\activate
+The existing Render service uses:
 
+- **Build command:** `pip install -r requirements.txt`
+- **Start command:** `gunicorn app:app`
+- **Branch:** `main`
+- **Auto deploy:** enabled
 
-3. Install dependencies
+After a GitHub commit reaches `main`, Render should start a deployment automatically. Confirm the deployment is live, check the logs, and test `/health`, login/registration, curriculum generation, and history operations. Do not treat the service's “Live” status by itself as proof that the AI provider or database is configured.
 
-pip install -r requirements.txt
+## Troubleshooting
 
+- **Generation returns 503:** `GROQ_API_KEY` is missing from the backend environment.
+- **Generation returns 502:** the AI provider timed out, rate-limited the request, rejected the model/request, or returned unusable content. Check the Render logs for a safe diagnostic message and verify `GROQ_MODEL`.
+- **Generation returns 500 while saving:** check `DATABASE_URL`, the database's availability, and permissions. `/health` verifies connectivity.
+- **Login session does not persist:** ensure `SECRET_KEY` is set to a stable random value and do not change it between deploys.
+- **Google sign-in is not shown:** set `GOOGLE_CLIENT_ID` in Render and configure the corresponding authorized JavaScript origin in Google Cloud Console. Email/password login remains available without Google sign-in.
 
-4. Set up Environment Variables
-Create a .env file in the root directory (or export them in your terminal) and add the following:
+## Security notes
 
-GROQ_API_KEY=your_groq_api_key_here
-GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
-SECRET_KEY=your_random_flask_secret_key
+- Keep API keys, database passwords, and the Flask session secret in environment variables or the hosting secret manager.
+- Google ID tokens are verified against the configured client ID; the former developer bypass is removed.
+- User passwords are stored as Werkzeug password hashes, not plaintext.
+- Keep user history endpoints behind login and verify ownership before deleting records.
+- For production, configure a unique random `SECRET_KEY`, use HTTPS, and keep dependencies updated.
 
+## License
 
-5. Update the Frontend Client ID
-Open static/script.js (or index.html if inline), find the Google Auth initialization, and ensure the client_id matches your Google Client ID.
-
-6. Run the application
-
-python app.py
-
-
-The app will start running at http://localhost:5051 or http://127.0.0.1:5051.
-
-
-
-
-
-**📂 Project Structure**
-coursecraft/
-│
-├── app.py                  # Main Flask backend application
-├── requirements.txt        # Python dependencies
-├── instance/
-│   └── history.db          # SQLite Database (Auto-generated)
-│
-├── static/
-│   ├── style.css           # UI Styling
-│   ├── script.js           # Frontend logic & API calls
-│   └── dictionaries/       # Typo.js dictionary files
-│
-└── templates/
-    └── index.html          # Main application interface
-
-
-**Contributing**
-Contributions, issues, and feature requests are welcome! Feel free to check the issues page.
-
-**📝 License**
-This project is open-source and available under the MIT License.
+See [LICENSE](LICENSE).

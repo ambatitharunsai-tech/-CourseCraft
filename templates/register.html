@@ -64,11 +64,12 @@
             i.addEventListener('blur', () => { i.style.borderColor = 'rgba(100, 116, 139, 0.2)'; i.style.boxShadow = 'none'; });
         });
 
-        // Google Auth
+        // Google Auth (only initialize when the server has a configured client ID)
+        const googleClientId = {{ google_client_id|tojson }};
         window.onload = function () {
-            if (typeof google !== 'undefined') {
+            if (typeof google !== 'undefined' && googleClientId) {
                 google.accounts.id.initialize({
-                    client_id: "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
+                    client_id: googleClientId,
                     callback: handleCredentialResponse
                 });
                 google.accounts.id.renderButton(

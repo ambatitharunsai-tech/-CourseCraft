@@ -41,23 +41,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // Bypass for users testing without real Google Client Credentials
-    window.devBypassLogin = async function () {
-        try {
-            const res = await fetch('/auth/google', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ dev_bypass: true })
-            });
-            const data = await res.json();
-            if (data.success) {
-                loginModal.style.display = 'none';
-                alert(`Test Login Success! Welcome, ${data.name}!`);
-                checkAuthStatus();
-            }
-        } catch (err) { console.error(err); }
-    };
-
     /* =========================
        CHECK USER QUOTA & STATUS
     ========================= */
