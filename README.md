@@ -120,6 +120,20 @@ After a GitHub commit reaches `main`, Render should start a deployment automatic
 - Keep user history endpoints behind login and verify ownership before deleting records.
 - For production, configure a unique random `SECRET_KEY`, use HTTPS, and keep dependencies updated.
 
+## Important source files
+
+| Path | Purpose |
+|---|---|
+| `app.py` | Flask application, authentication, curriculum generation and history routes |
+| `schema.json` | Structured curriculum response schema |
+| `templates/` | Jinja-rendered pages |
+| `static/script.js` | Browser-side interactions and API requests |
+| `static/style.css` | Application styles |
+| `requirements.txt` | Python dependencies |
+| `.env.example` | Environment-variable template; contains placeholders only |
+
+For changes to prompts, schema validation or generation behavior, review the backend implementation and the matching frontend rendering together.
+
 ## License
 
 See [LICENSE](LICENSE).
